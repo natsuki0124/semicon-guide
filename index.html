@@ -8,316 +8,342 @@
   <style>
     * { box-sizing: border-box; }
     body {
-      margin: 0;
-      background: #f5f7fa;
-      color: #172033;
+      margin: 0; background: #f5f7fa; color: #172033;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
     }
-    .header {
-      background: #0f172a;
-      color: white;
-      padding: 18px 18px 20px;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-    .header-inner { max-width: 760px; margin: auto; }
-    .title { font-size: 21px; font-weight: 800; }
-    .subtitle { margin-top: 4px; color: #cbd5e1; font-size: 13px; }
-    .container { max-width: 760px; margin: auto; padding: 16px; }
+    .header { background:#0f172a; color:#fff; padding:18px; position:sticky; top:0; z-index:10; }
+    .header-inner,.container { max-width:760px; margin:auto; }
+    .title { font-size:21px; font-weight:800; }
+    .subtitle { margin-top:4px; color:#cbd5e1; font-size:13px; }
+    .container { padding:16px; }
     .card {
-      background: white;
-      border: 1px solid #e2e8f0;
-      border-radius: 18px;
-      padding: 18px;
-      margin-bottom: 14px;
-      box-shadow: 0 4px 18px rgba(15,23,42,.05);
+      background:#fff; border:1px solid #e2e8f0; border-radius:18px;
+      padding:18px; margin-bottom:14px; box-shadow:0 4px 18px rgba(15,23,42,.05);
     }
-    .section-title { font-weight: 800; font-size: 16px; margin-bottom: 10px; }
-    .hint { font-size: 12px; color: #64748b; line-height: 1.6; margin-bottom: 10px; }
+    .section-title { font-weight:800; font-size:16px; margin-bottom:9px; }
+    .hint { font-size:12px; color:#64748b; line-height:1.6; margin-bottom:10px; }
     textarea {
-      width: 100%;
-      min-height: 96px;
-      border: 1px solid #cbd5e1;
-      border-radius: 13px;
-      padding: 13px;
-      font-size: 16px;
-      line-height: 1.6;
-      resize: vertical;
-      outline: none;
+      width:100%; min-height:90px; border:1px solid #cbd5e1; border-radius:13px;
+      padding:13px; font-size:16px; line-height:1.6; resize:vertical; outline:none;
     }
-    textarea:focus { border-color: #0f172a; box-shadow: 0 0 0 3px rgba(15,23,42,.08); }
-    .buttons { display: flex; gap: 9px; margin-top: 11px; }
-    button {
-      border: 0;
-      border-radius: 12px;
-      padding: 12px 15px;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
+    textarea:focus { border-color:#0f172a; box-shadow:0 0 0 3px rgba(15,23,42,.08); }
+    .quick-tags { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+    .tag {
+      background:#f1f5f9; color:#334155; border:1px solid #e2e8f0;
+      border-radius:999px; padding:7px 10px; font-size:12px; font-weight:700;
     }
-    .primary { background: #0f172a; color: white; flex: 1; }
-    .secondary { background: #f1f5f9; color: #334155; }
-    .primary:disabled { opacity: .55; cursor: not-allowed; }
-    .status {
-      font-size: 13px;
-      color: #475569;
-      margin: 12px 0;
-    }
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .stat {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      padding: 10px 6px;
-      text-align: center;
-    }
-    .stat-number { font-size: 20px; font-weight: 800; }
-    .stat-label { font-size: 11px; color: #64748b; margin-top: 2px; }
-    .result {
-      border: 1px solid #e2e8f0;
-      border-radius: 15px;
-      padding: 14px;
-      margin-top: 10px;
-      background: white;
-    }
-    .result.found { border-left: 5px solid #10b981; }
-    .result.not-found { border-left: 5px solid #ef4444; }
-    .result-title {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .company { font-size: 16px; font-weight: 800; }
-    .badge {
-      white-space: nowrap;
-      border-radius: 999px;
-      padding: 4px 8px;
-      font-size: 11px;
-      font-weight: 800;
-    }
-    .badge-found { background: #dcfce7; color: #166534; }
-    .badge-not { background: #fee2e2; color: #991b1b; }
-    .booth { margin-top: 8px; font-size: 14px; font-weight: 700; color: #334155; }
-    .description { margin-top: 7px; font-size: 12px; line-height: 1.65; color: #64748b; }
-    .footer-note { font-size: 11px; color: #94a3b8; text-align: center; padding: 10px 0 25px; }
-    .loading { color: #475569; }
-    .error {
-      background: #fff1f2;
-      color: #9f1239;
-      border: 1px solid #fecdd3;
-      padding: 12px;
-      border-radius: 12px;
-      font-size: 13px;
-      line-height: 1.6;
-    }
-    @media (max-width: 480px) {
-      .container { padding: 12px; }
-      .card { padding: 15px; border-radius: 16px; }
-      .title { font-size: 19px; }
-      .buttons { flex-direction: column; }
-      .primary, .secondary { width: 100%; }
+    .tag.active { background:#e2e8f0; border-color:#94a3b8; }
+    .buttons { display:flex; gap:9px; margin-top:12px; }
+    button { border:0; border-radius:12px; padding:12px 15px; font-size:14px; font-weight:700; cursor:pointer; }
+    .primary { background:#0f172a; color:#fff; flex:1; }
+    .secondary { background:#f1f5f9; color:#334155; }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    .status { font-size:13px; color:#475569; margin:12px 0; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+    .stat { background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:10px 6px; text-align:center; }
+    .stat-number { font-size:20px; font-weight:800; }
+    .stat-label { font-size:11px; color:#64748b; margin-top:2px; }
+    .result { border:1px solid #e2e8f0; border-radius:15px; padding:14px; margin-top:10px; background:#fff; }
+    .result.found { border-left:5px solid #10b981; }
+    .result.not-found { border-left:5px solid #ef4444; }
+    .result.tech { border-left:5px solid #6366f1; }
+    .result-title { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .company { font-size:16px; font-weight:800; }
+    .badge { white-space:nowrap; border-radius:999px; padding:4px 8px; font-size:11px; font-weight:800; }
+    .badge-found { background:#dcfce7; color:#166534; }
+    .badge-not { background:#fee2e2; color:#991b1b; }
+    .badge-tech { background:#e0e7ff; color:#3730a3; }
+    .booth { margin-top:8px; font-size:14px; font-weight:700; color:#334155; }
+    .description { margin-top:7px; font-size:12px; line-height:1.65; color:#64748b; }
+    .match-line { margin-top:9px; font-size:12px; color:#4338ca; font-weight:700; }
+    .empty { color:#64748b; font-size:13px; padding:8px 0; }
+    .error { background:#fff1f2; color:#9f1239; border:1px solid #fecdd3; padding:12px; border-radius:12px; font-size:13px; line-height:1.6; }
+    .footer-note { font-size:11px; color:#94a3b8; text-align:center; padding:10px 0 25px; }
+    @media(max-width:480px){
+      .container{padding:12px}.card{padding:15px;border-radius:16px}.title{font-size:19px}
+      .buttons{flex-direction:column}.primary,.secondary{width:100%}
     }
   </style>
 </head>
 
 <body>
-  <header class="header">
-    <div class="header-inner">
-      <div class="title">🧭 SEMICON Taiwan 看展助手</div>
-      <div class="subtitle">第一階段：快速確認想看的廠商是否參展</div>
+<header class="header">
+  <div class="header-inner">
+    <div class="title">🧭 SEMICON Taiwan 看展助手</div>
+    <div class="subtitle">V8.1｜廠商比對＋核心技術關鍵字</div>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="card">
+    <div class="section-title">🔎 我想看的廠商</div>
+    <div class="hint">多家廠商請用「分號 ;」分隔，例如：台積電; ASML; KLA; Coherent</div>
+    <textarea id="companyInput" placeholder="例如：台積電; ASML; KLA; Coherent"></textarea>
+  </section>
+
+  <section class="card">
+    <div class="section-title">🧠 我關心的核心技術領域或關鍵字</div>
+    <div class="hint">
+      請輸入你想在 SEMICON 找的技術，例如：先進封裝; CoWoS; Hybrid Bonding; Silicon Photonics。
+      目前先使用參展商資料中的「官方簡介／技術領域」做本地端比對，不呼叫 AI。
     </div>
-  </header>
 
-  <main class="container">
-    <section class="card">
-      <div class="section-title">🔎 我想看的廠商</div>
-      <div class="hint">
-        可以一次輸入多家廠商，中間用「分號 ;」分隔。<br>
-        例如：台積電; ASML; KLA; NVIDIA
-      </div>
+    <textarea id="techInput" placeholder="例如：先進封裝; CoWoS; Silicon Photonics; 量子運算"></textarea>
 
-      <textarea id="companyInput" placeholder="例如：台積電; ASML; KLA; NVIDIA"></textarea>
-
-      <div class="buttons">
-        <button id="searchBtn" class="primary">🔍 開始比對</button>
-        <button id="clearBtn" class="secondary">清除</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="section-title">📊 比對結果</div>
-      <div id="status" class="status">正在載入 SEMICON 參展廠商資料……</div>
-      <div id="stats" class="stats" style="display:none;"></div>
-      <div id="results"></div>
-    </section>
-
-    <div class="footer-note">
-      SEMICON Taiwan 看展助手｜參展資料來源：內建 exhibitors.json
+    <div class="quick-tags">
+      <button class="tag" data-tech="先進封裝">＋先進封裝</button>
+      <button class="tag" data-tech="CoWoS">＋CoWoS</button>
+      <button class="tag" data-tech="Hybrid Bonding">＋Hybrid Bonding</button>
+      <button class="tag" data-tech="Silicon Photonics">＋Silicon Photonics</button>
+      <button class="tag" data-tech="量子運算">＋量子運算</button>
+      <button class="tag" data-tech="檢測量測">＋檢測量測</button>
     </div>
-  </main>
 
-  <script>
-    let exhibitors = [];
+    <div class="buttons">
+      <button id="searchBtn" class="primary" disabled>🔍 開始分析</button>
+      <button id="clearBtn" class="secondary">清除</button>
+    </div>
+  </section>
 
-    function normalizeName(name) {
-      return String(name || "")
-        .toLowerCase()
-        .replace(/[\s.,，。、'’"“”()（）\-_/＆&]/g, "");
+  <section class="card">
+    <div class="section-title">📊 廠商比對結果</div>
+    <div id="status" class="status">正在載入 SEMICON 參展廠商資料……</div>
+    <div id="companyStats" class="stats" style="display:none;"></div>
+    <div id="companyResults"></div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">🎯 技術關聯廠商</div>
+    <div class="hint">
+      這裡會從全部 1,304 家參展商中，找出「官方簡介／技術領域」文字中包含你輸入關鍵字的廠商。
+      這是第一版本地端搜尋，之後再讓 AI 做語意分析。
+    </div>
+    <div id="techStats" class="stats" style="display:none;"></div>
+    <div id="techResults"><div class="empty">輸入技術關鍵字後按「開始分析」。</div></div>
+  </section>
+
+  <div class="footer-note">
+    SEMICON Taiwan 看展助手｜參展資料來源：內建 exhibitors.json
+  </div>
+</main>
+
+<script>
+  let exhibitors = [];
+
+  function normalizeText(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/[\s.,，。、'’"“”()（）\-_/＆&:+]/g, "");
+  }
+
+  function splitList(text) {
+    return [...new Set(
+      String(text || "")
+        .split(/[;；]+/)
+        .map(x => x.trim())
+        .filter(Boolean)
+    )];
+  }
+
+  function findExhibitor(inputName) {
+    const target = normalizeText(inputName);
+    if (!target) return null;
+
+    let found = exhibitors.find(e => normalizeText(e.name) === target);
+    if (found) return found;
+
+    found = exhibitors.find(e => {
+      const candidate = normalizeText(e.name);
+      return candidate.includes(target) || target.includes(candidate);
+    });
+    return found || null;
+  }
+
+  function companyMatchScore(exhibitor, keywords) {
+    const text = normalizeText(
+      `${exhibitor.name || ""} ${exhibitor.description || ""}`
+    );
+
+    const matched = keywords.filter(k => {
+      const key = normalizeText(k);
+      return key && text.includes(key);
+    });
+
+    return {
+      score: matched.length,
+      matched
+    };
+  }
+
+  function renderCompanyResults(names) {
+    const results = document.getElementById("companyResults");
+    const stats = document.getElementById("companyStats");
+
+    if (!names.length) {
+      stats.style.display = "none";
+      results.innerHTML = '<div class="empty">沒有輸入指定廠商。</div>';
+      return;
     }
 
-    function splitCompanies(text) {
-      return [...new Set(
-        String(text || "")
-          .split(/[;；]+/)
-          .map(x => x.trim())
-          .filter(Boolean)
-      )];
-    }
+    let foundCount = 0;
+    let html = "";
 
-    function findExhibitor(inputName) {
-      const target = normalizeName(inputName);
-      if (!target) return null;
+    names.forEach(name => {
+      const exhibitor = findExhibitor(name);
 
-      // 1. 完全比對
-      let found = exhibitors.find(e => normalizeName(e.name) === target);
-      if (found) return found;
-
-      // 2. 部分名稱比對
-      found = exhibitors.find(e => {
-        const candidate = normalizeName(e.name);
-        return candidate.includes(target) || target.includes(candidate);
-      });
-      return found || null;
-    }
-
-    function renderResults(names) {
-      const results = document.getElementById("results");
-      const stats = document.getElementById("stats");
-      const status = document.getElementById("status");
-
-      if (!names.length) {
-        status.textContent = "請先輸入至少一家廠商。";
-        stats.style.display = "none";
-        results.innerHTML = "";
-        return;
-      }
-
-      let foundCount = 0;
-      let html = "";
-
-      names.forEach(name => {
-        const exhibitor = findExhibitor(name);
-
-        if (exhibitor) {
-          foundCount++;
-          html += `
-            <div class="result found">
-              <div class="result-title">
-                <div class="company">${escapeHtml(exhibitor.name)}</div>
-                <span class="badge badge-found">🟢 有參展</span>
-              </div>
-              <div class="booth">📍 攤位：${escapeHtml(exhibitor.booth || "未提供")}</div>
-              ${exhibitor.description ? `<div class="description">${escapeHtml(exhibitor.description)}</div>` : ""}
+      if (exhibitor) {
+        foundCount++;
+        html += `
+          <div class="result found">
+            <div class="result-title">
+              <div class="company">${escapeHtml(exhibitor.name)}</div>
+              <span class="badge badge-found">🟢 有參展</span>
             </div>
-          `;
-        } else {
-          html += `
-            <div class="result not-found">
-              <div class="result-title">
-                <div class="company">${escapeHtml(name)}</div>
-                <span class="badge badge-not">🔴 未找到</span>
-              </div>
-              <div class="description">目前在內建 SEMICON 參展名單中沒有找到相符廠商。</div>
+            <div class="booth">📍 攤位：${escapeHtml(exhibitor.booth || "未提供")}</div>
+            ${exhibitor.description ? `<div class="description">${escapeHtml(exhibitor.description)}</div>` : ""}
+          </div>`;
+      } else {
+        html += `
+          <div class="result not-found">
+            <div class="result-title">
+              <div class="company">${escapeHtml(name)}</div>
+              <span class="badge badge-not">🔴 未找到</span>
             </div>
-          `;
-        }
-      });
-
-      const notFoundCount = names.length - foundCount;
-
-      stats.style.display = "grid";
-      stats.innerHTML = `
-        <div class="stat">
-          <div class="stat-number">${names.length}</div>
-          <div class="stat-label">查詢廠商</div>
-        </div>
-        <div class="stat">
-          <div class="stat-number">${foundCount}</div>
-          <div class="stat-label">有參展</div>
-        </div>
-        <div class="stat">
-          <div class="stat-number">${notFoundCount}</div>
-          <div class="stat-label">未找到</div>
-        </div>
-      `;
-
-      status.textContent = `完成比對：共 ${names.length} 家`;
-      results.innerHTML = html;
-    }
-
-    function escapeHtml(value) {
-      return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-
-    async function loadExhibitors() {
-      const status = document.getElementById("status");
-      const searchBtn = document.getElementById("searchBtn");
-
-      try {
-        const response = await fetch("./data/exhibitors.json", { cache: "no-store" });
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        exhibitors = await response.json();
-
-        status.textContent = `✅ 已載入 ${exhibitors.length.toLocaleString()} 家 SEMICON 參展廠商`;
-        searchBtn.disabled = false;
-      } catch (error) {
-        status.innerHTML = `
-          <div class="error">
-            ❌ 無法載入參展廠商資料。<br>
-            請確認 GitHub 中的檔案位置是：
-            <strong>data/exhibitors.json</strong><br>
-            錯誤：${escapeHtml(error.message)}
-          </div>
-        `;
-        searchBtn.disabled = true;
-      }
-    }
-
-    document.getElementById("searchBtn").addEventListener("click", () => {
-      renderResults(splitCompanies(document.getElementById("companyInput").value));
-    });
-
-    document.getElementById("clearBtn").addEventListener("click", () => {
-      document.getElementById("companyInput").value = "";
-      document.getElementById("results").innerHTML = "";
-      document.getElementById("stats").style.display = "none";
-      document.getElementById("status").textContent =
-        `✅ 已載入 ${exhibitors.length.toLocaleString()} 家 SEMICON 參展廠商`;
-    });
-
-    document.getElementById("companyInput").addEventListener("keydown", event => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-        renderResults(splitCompanies(event.target.value));
+            <div class="description">目前在內建 SEMICON 參展名單中沒有找到相符廠商。</div>
+          </div>`;
       }
     });
 
-    loadExhibitors();
-  </script>
+    stats.style.display = "grid";
+    stats.innerHTML = `
+      <div class="stat"><div class="stat-number">${names.length}</div><div class="stat-label">查詢廠商</div></div>
+      <div class="stat"><div class="stat-number">${foundCount}</div><div class="stat-label">有參展</div></div>
+      <div class="stat"><div class="stat-number">${names.length - foundCount}</div><div class="stat-label">未找到</div></div>
+    `;
+    results.innerHTML = html;
+  }
+
+  function renderTechResults(keywords) {
+    const results = document.getElementById("techResults");
+    const stats = document.getElementById("techStats");
+
+    if (!keywords.length) {
+      stats.style.display = "none";
+      results.innerHTML = '<div class="empty">尚未輸入核心技術關鍵字。</div>';
+      return;
+    }
+
+    const matches = exhibitors
+      .map(exhibitor => {
+        const result = companyMatchScore(exhibitor, keywords);
+        return { exhibitor, ...result };
+      })
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score || a.exhibitor.name.localeCompare(b.exhibitor.name));
+
+    stats.style.display = "grid";
+    stats.innerHTML = `
+      <div class="stat"><div class="stat-number">${keywords.length}</div><div class="stat-label">技術關鍵字</div></div>
+      <div class="stat"><div class="stat-number">${matches.length}</div><div class="stat-label">找到相關廠商</div></div>
+      <div class="stat"><div class="stat-number">${matches.filter(x => x.score >= 2).length}</div><div class="stat-label">命中 2+ 關鍵字</div></div>
+    `;
+
+    if (!matches.length) {
+      results.innerHTML = `
+        <div class="empty">
+          目前沒有在參展商的「官方簡介／技術領域」文字中找到完全相符的關鍵字。
+          <br><br>
+          這不代表沒有相關廠商，只代表第一版的文字搜尋沒有命中；下一階段會交給 AI 做語意判斷。
+        </div>`;
+      return;
+    }
+
+    results.innerHTML = matches.map(item => `
+      <div class="result tech">
+        <div class="result-title">
+          <div class="company">${escapeHtml(item.exhibitor.name)}</div>
+          <span class="badge badge-tech">🎯 ${item.score} 個命中</span>
+        </div>
+        <div class="booth">📍 攤位：${escapeHtml(item.exhibitor.booth || "未提供")}</div>
+        <div class="match-line">符合：${item.matched.map(escapeHtml).join("、")}</div>
+        ${item.exhibitor.description ? `<div class="description">${escapeHtml(item.exhibitor.description)}</div>` : ""}
+      </div>
+    `).join("");
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  async function loadExhibitors() {
+    const status = document.getElementById("status");
+    const searchBtn = document.getElementById("searchBtn");
+
+    try {
+      const response = await fetch("./data/exhibitors.json", { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      exhibitors = await response.json();
+      status.textContent = `✅ 已載入 ${exhibitors.length.toLocaleString()} 家 SEMICON 參展廠商`;
+      searchBtn.disabled = false;
+    } catch (error) {
+      status.innerHTML = `
+        <div class="error">
+          ❌ 無法載入參展廠商資料。請確認 GitHub 中的檔案位置是
+          <strong>data/exhibitors.json</strong>。
+          <br>錯誤：${escapeHtml(error.message)}
+        </div>`;
+    }
+  }
+
+  document.querySelectorAll("[data-tech]").forEach(button => {
+    button.addEventListener("click", () => {
+      const input = document.getElementById("techInput");
+      const value = button.dataset.tech;
+      const current = splitList(input.value);
+
+      if (current.some(x => normalizeText(x) === normalizeText(value))) {
+        input.value = current.filter(x => normalizeText(x) !== normalizeText(value)).join("; ");
+        button.classList.remove("active");
+      } else {
+        input.value = [...current, value].join("; ");
+        button.classList.add("active");
+      }
+    });
+  });
+
+  document.getElementById("searchBtn").addEventListener("click", () => {
+    const companies = splitList(document.getElementById("companyInput").value);
+    const keywords = splitList(document.getElementById("techInput").value);
+
+    renderCompanyResults(companies);
+    renderTechResults(keywords);
+
+    const total = companies.length + keywords.length;
+    document.getElementById("status").textContent =
+      `完成分析：${companies.length} 家指定廠商＋${keywords.length} 個技術關鍵字`;
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", () => {
+    document.getElementById("companyInput").value = "";
+    document.getElementById("techInput").value = "";
+    document.getElementById("companyResults").innerHTML = "";
+    document.getElementById("techResults").innerHTML =
+      '<div class="empty">輸入技術關鍵字後按「開始分析」。</div>';
+    document.getElementById("companyStats").style.display = "none";
+    document.getElementById("techStats").style.display = "none";
+    document.querySelectorAll(".tag").forEach(x => x.classList.remove("active"));
+    document.getElementById("status").textContent =
+      `✅ 已載入 ${exhibitors.length.toLocaleString()} 家 SEMICON 參展廠商`;
+  });
+
+  loadExhibitors();
+</script>
 </body>
 </html>
