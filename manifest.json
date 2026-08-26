@@ -1,0 +1,10 @@
+{
+  "name": "SEMICON Taiwan 看展助手",
+  "short_name": "SEMICON助手",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#0f172a",
+  "lang": "zh-TW",
+  "icons": []
+}
