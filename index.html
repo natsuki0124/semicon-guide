@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>智慧觀展動線與展商情報分析系統</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PapaParse for CSV reading -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- html2pdf for direct PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap');
+    
+    body { 
+      background-color: #f8fafc; 
+      color: #1e293b; 
+      font-family: 'Plus Jakarta Sans', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif; 
+    }
+    .elegant-card { 
+      background: #ffffff; 
+      border: 1px solid #e2e8f0; 
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05); 
+    }
+    .step-active { 
+      background: #0f172a; 
+      color: #ffffff; 
+      border-color: #0f172a; 
+      font-weight: 600; 
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15); 
+    }
+    .step-done { 
+      background: #f1f5f9; 
+      color: #0f172a; 
+      border-color: #cbd5e1; 
+      font-weight: 500; 
+    }
+    .step-inactive { 
+      background: #ffffff; 
+      color: #94a3b8; 
+      border-color: #e2e8f0; 
+    }
+    .badge-finance { 
+      background: #ecfdf5; 
+      border: 1px solid #a7f3d0; 
+      color: #047857; 
+    }
+    .badge-portal {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      color: #334155;
+      transition: all 0.2s ease;
+    }
+    .badge-portal:hover {
+      background: #0f172a;
+      color: #ffffff;
+      border-color: #0f172a;
+    }
+    @media print {
+      body { background: white !important; color: black !important; }
+      .no-print { display: none !important; }
+      .print-card { page-break-inside: avoid; border: 1px solid #cbd5e1 !important; color: black !important; background: white !important; box-shadow: none !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-16 text-base">
+
+  <!-- 頂部導航 -->
+  <header class="sticky top-0 z-50 bg-white/95 backdrop-blur-md px-4 md:px-6 py-3.5 border-b border-slate-200 flex items-center justify-between no-print">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+        🧭
+      </div>
+      <div>
+        <h1 class="font-bold text-base md:text-lg text-slate-900 tracking-tight leading-tight">智慧觀展助手</h1>
+        <p class="text-xs text-slate-500 font-medium">動線規劃與展商情報分析</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full flex items-center gap-1.5 font-medium">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 雲端 AI 就緒
+      </span>
+      <button onclick="toggleSettings()" class="text-slate-600 hover:text-slate-900 text-sm bg-white hover:bg-slate-50 p-2 rounded-lg border border-slate-200 transition shadow-sm">
+        ⚙️
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto p-4 md:p-6 space-y-5">
+
+    <!-- 設定區 (備用) -->
+    <div id="settingsBox" class="elegant-card p-4 rounded-xl space-y-3 hidden no-print">
+      <div class="flex justify-between items-center">
+        <label class="block text-sm font-bold text-slate-700">API 代理端點設定：</label>
+        <button onclick="toggleSettings()" class="text-slate-400 hover:text-slate-600 text-sm font-bold">關閉 ✕</button>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">目前使用的 Cloudflare Worker：</label>
+        <input type="text" id="workerUrlInput" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-slate-800">
+      </div>
+    </div>
+
+    <!-- 流程進度條 (4 步驟) -->
+    <div class="grid grid-cols-4 gap-1.5 md:gap-2.5 text-center text-xs md:text-sm no-print">
+      <div id="stepTab1" class="py-2.5 md:py-3 rounded-xl border step-active flex flex-col items-center justify-center transition-all">
+        <span>1. 匯入條件</span>
+      </div>
+      <div id="stepTab2" class="py-2.5 md:py-3 rounded-xl border step-inactive flex flex-col items-center justify-center transition-all">
+        <span>2. 深度情報</span>
+      </div>
+      <div id="stepTab3" class="py-2.5 md:py-3 rounded-xl border step-inactive flex flex-col items-center justify-center transition-all">
+        <span>3. 動線優化</span>
+      </div>
+      <div id="stepTab4" class="py-2.5 md:py-3 rounded-xl border step-inactive flex flex-col items-center justify-center transition-all">
+        <span>4. 任務卡</span>
+      </div>
+    </div>
+
+    <!-- ==================== STEP 1: 匯入與條件輸入 ==================== -->
+    <section id="step1" class="space-y-4">
+      <div class="elegant-card p-5 md:p-8 rounded-2xl space-y-6">
+        <div class="border-b border-slate-100 pb-3">
+          <h2 class="font-bold text-slate-900 text-lg md:text-xl flex items-center gap-2">
+            <span>📁</span> 步驟 1：匯入展商名冊與觀展偏好
+          </h2>
+          <p class="text-sm text-slate-500 mt-1">支援任何展會之展商名冊 CSV 匯入，自訂想了解的技術與公司。</p>
+        </div>
+
+        <div class="bg-slate-50 p-4 md:p-5 rounded-xl border border-slate-200/80 space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="block text-sm md:text-base font-semibold text-slate-800">匯入參展廠商清單 (CSV 格式)</label>
+            <span class="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-medium">CSV / TXT</span>
+          </div>
+
+          <div class="text-xs md:text-sm text-slate-600 bg-white p-3.5 rounded-lg border border-slate-200 space-y-2 leading-relaxed">
+            <p class="font-semibold text-slate-800">💡 建議 CSV 包含欄位標題：</p>
+            <p class="font-mono text-slate-700 bg-slate-50 p-2 rounded border border-slate-200/60">廠商名稱, 攤位編號, 官方簡介或技術領域</p>
+            <div class="pt-1">
+              <button onclick="loadSampleData()" class="text-xs md:text-sm bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg transition font-medium shadow-sm">
+                ⚡ 載入展示範例資料 (10筆)
+              </button>
+            </div>
+          </div>
+
+          <input type="file" id="csvFileInput" accept=".csv, .txt" onchange="handleFileUpload(event)" class="w-full text-sm text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-200 file:text-slate-800 hover:file:bg-slate-300 cursor-pointer">
+          <div id="fileLoadedNotice" class="text-sm text-emerald-700 font-medium hidden flex items-center gap-1.5 bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+            <span>✅ 已成功載入展商資料：</span><span id="loadedCount" class="font-bold">0</span> 筆
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm md:text-base font-semibold text-slate-800 mb-1.5">感興趣的指定廠商（可留空或以逗號分隔）</label>
+          <input type="text" id="targetCompanies" placeholder="例如：均豪、旺矽、台積電..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm md:text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:bg-white transition">
+        </div>
+
+        <div>
+          <label class="block text-sm md:text-base font-semibold text-slate-800 mb-1.5">關心的核心技術領域或關鍵字</label>
+          <input type="text" id="targetDomains" placeholder="例如：AI 晶片封裝、光電整合、自動光學檢測..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm md:text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:bg-white transition">
+          
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button onclick="appendDomain('先進封裝與異質整合')" class="text-xs md:text-sm bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-full transition shadow-sm">+ 先進封裝</button>
+            <button onclick="appendDomain('光電整合與高速傳輸')" class="text-xs md:text-sm bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-full transition shadow-sm">+ 光電整合</button>
+            <button onclick="appendDomain('晶圓檢測與精密量測')" class="text-xs md:text-sm bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-full transition shadow-sm">+ 檢測量測</button>
+            <button onclick="appendDomain('第三代半導體材料')" class="text-xs md:text-sm bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-full transition shadow-sm">+ 新型材料</button>
+          </div>
+        </div>
+
+        <button onclick="runStep2_Matching()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-4 rounded-xl shadow-md transition duration-200 text-base flex items-center justify-center space-x-2">
+          <span>下一步：AI 深度分析 ➔</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 2: 比對篩選與完整情報 ==================== -->
+    <section id="step2" class="space-y-4 hidden">
+      <div class="elegant-card p-5 md:p-8 rounded-2xl space-y-5">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
+          <div>
+            <h2 class="font-bold text-slate-900 text-lg md:text-xl flex items-center gap-2">
+              <span>🎯</span> 步驟 2：展商深度情報與排序篩選
+            </h2>
+            <p class="text-xs md:text-sm text-slate-500 mt-0.5">點擊核取方塊選擇欲參訪之廠商：</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="selectAllMatched(true)" class="text-xs md:text-sm bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 font-medium">全選</button>
+            <button onclick="selectAllMatched(false)" class="text-xs md:text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg border border-slate-200 font-medium">全取消</button>
+          </div>
+        </div>
+
+        <div id="step2_loading" class="py-16 flex flex-col items-center justify-center space-y-3">
+          <div class="animate-spin rounded-full h-9 w-9 border-3 border-slate-800 border-t-transparent"></div>
+          <p class="text-sm md:text-base text-slate-600 font-medium animate-pulse">AI 正在深度比對名單、解析技術架構...</p>
+        </div>
+
+        <div id="matchedListContainer" class="space-y-4 max-h-[600px] overflow-y-auto pr-1"></div>
+
+        <div class="flex gap-3 pt-3 border-t border-slate-100">
+          <button onclick="goToStep(1)" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3.5 rounded-xl transition text-sm md:text-base">
+            ⬅ 返回修改
+          </button>
+          <button onclick="runStep3_Routing()" class="w-2/3 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl shadow-md transition text-sm md:text-base">
+            下一步：排定最佳動線 ➔
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 3: 動線規劃 ==================== -->
+    <section id="step3" class="space-y-4 hidden">
+      <div class="elegant-card p-5 md:p-8 rounded-2xl space-y-5">
+        <div class="border-b border-slate-100 pb-3">
+          <h2 class="font-bold text-slate-900 text-lg md:text-xl flex items-center gap-2">
+            <span>🗺️</span> 步驟 3：最適觀展動線建議
+          </h2>
+          <p class="text-xs md:text-sm text-slate-500 mt-0.5">已依攤位編號完成路徑最佳化排序：</p>
+        </div>
+
+        <div id="routeTableContainer" class="overflow-x-auto border border-slate-200 rounded-xl"></div>
+
+        <div class="flex gap-3 pt-3 border-t border-slate-100">
+          <button onclick="goToStep(2)" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3.5 rounded-xl transition text-sm md:text-base">
+            ⬅ 重選廠商
+          </button>
+          <button onclick="runStep4_GenerateCards()" class="w-2/3 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl shadow-md transition text-sm md:text-base">
+            下一步：生成 Visit Card ➔
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 4: Visit Card 產出 ==================== -->
+    <section id="step4" class="space-y-4 hidden">
+      <div class="elegant-card p-5 md:p-8 rounded-2xl space-y-5">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2 no-print">
+          <div>
+            <h2 class="font-bold text-slate-900 text-lg md:text-xl flex items-center gap-2">
+              <span>📋</span> 步驟 4：專屬 Visit Card 觀展手冊
+            </h2>
+            <p class="text-xs md:text-sm text-slate-500 mt-0.5">支援現場速記與一鍵輸出 PDF。</p>
+          </div>
+          <button onclick="exportToPDF()" class="text-xs md:text-sm bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-xl shadow transition flex items-center gap-1.5">
+            <span>📥</span> 輸出 PDF 手冊
+          </button>
+        </div>
+
+        <div id="step4_loading" class="py-16 flex flex-col items-center justify-center space-y-3 no-print">
+          <div class="animate-spin rounded-full h-9 w-9 border-3 border-slate-800 border-t-transparent"></div>
+          <p class="text-sm md:text-base text-slate-600 font-medium animate-pulse">AI 分析師正在為選定廠商撰寫深度 Visit Card...</p>
+        </div>
+
+        <div id="pdfExportArea" class="space-y-6 pt-2"></div>
+
+        <div class="flex gap-3 pt-4 border-t border-slate-100 no-print">
+          <button onclick="goToStep(3)" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3.5 rounded-xl transition text-sm md:text-base">
+            ⬅ 返回動線
+          </button>
+          <button onclick="goToStep(1)" class="w-2/3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-medium py-3.5 rounded-xl transition text-sm md:text-base">
+            🔄 重新開始新規劃
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // ==============================================================
+    // 🌐 已綁定你的 Cloudflare Worker API 代理網址
+    // ==============================================================
+    const CLOUDFLARE_WORKER_URL = "https://semicon-guide-ai.natsuki3m.workers.dev";
+
+    let rawExhibitors = [];
+    let scoredExhibitors = [];
+    let selectedExhibitors = [];
+    let routedExhibitors = [];
+
+    const SAMPLE_CSV = `廠商名稱,攤位編號,官方簡介或技術領域
+均豪精密,J2345,先進封裝設備、AOI自動光學檢測機台
+日月光投控,K2100,晶片先進封裝、3D IC異質整合代工方案
+旺矽科技,L1102,晶圓探針卡、垂直探針座與光電測試治具
+志聖工業,J2350,半導體與高階載板熱處理烘烤系統
+台積電,M1000,先進邏輯晶圓代工與先進封裝生態鏈
+穩懋半導體,K3320,化合物半導體晶圓代工與功率元件
+漢民科技,L2500,離子植入機與關鍵半導體前段設備
+長興材料,J3110,晶圓級封裝光阻劑、封裝樹脂膠膜材料
+穎崴科技,L1500,高頻高速大功耗測試座與探針卡治具
+聯景光電,J2890,高速光收發模組、光電共封裝關鍵光學元件`;
+
+    window.onload = function() {
+      const workerInput = document.getElementById("workerUrlInput");
+      if (workerInput) workerInput.value = CLOUDFLARE_WORKER_URL;
+    };
+
+    function getTargetWorkerUrl() {
+      const inputVal = document.getElementById("workerUrlInput") ? document.getElementById("workerUrlInput").value.trim() : "";
+      return inputVal || CLOUDFLARE_WORKER_URL;
+    }
+
+    // 透過 Cloudflare Worker 呼叫 AI
+    async function callGeminiAI(promptText) {
+      const workerUrl = getTargetWorkerUrl();
+      if (!workerUrl) {
+        throw new Error("尚未設定 Cloudflare Worker 網址！");
+      }
+
+      const payload = {
+        contents: [{ role: "user", parts: [{ text: promptText }] }],
+        generationConfig: { temperature: 0.2, responseMimeType: "application/json" }
+      };
+
+      const response = await fetch(workerUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      
+      return data.candidates[0].content.parts[0].text;
+    }
+
+    function toggleSettings() {
+      document.getElementById("settingsBox").classList.toggle("hidden");
+    }
+
+    function appendDomain(text) {
+      const input = document.getElementById("targetDomains");
+      if (input.value) {
+        if (!input.value.includes(text)) input.value += ", " + text;
+      } else {
+        input.value = text;
+      }
+    }
+
+    function loadSampleData() {
+      Papa.parse(SAMPLE_CSV, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          rawExhibitors = results.data;
+          document.getElementById("loadedCount").innerText = rawExhibitors.length;
+          document.getElementById("fileLoadedNotice").classList.remove("hidden");
+        }
+      });
+    }
+
+    function handleFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          rawExhibitors = results.data.filter(r => r["廠商名稱"] || r["公司名稱"] || r["Name"]);
+          rawExhibitors = rawExhibitors.map(r => ({
+            "廠商名稱": r["廠商名稱"] || r["公司名稱"] || r["Name"] || "未命名廠商",
+            "攤位編號": r["攤位編號"] || r["攤位"] || r["Booth"] || "現場確認",
+            "官方簡介或技術領域": r["官方簡介或技術領域"] || r["簡介"] || r["領域"] || r["Description"] || ""
+          }));
+          document.getElementById("loadedCount").innerText = rawExhibitors.length;
+          document.getElementById("fileLoadedNotice").classList.remove("hidden");
+        },
+        error: function(err) {
+          alert("CSV 解析失敗：" + err.message);
+        }
+      });
+    }
+
+    function goToStep(stepNumber) {
+      [1, 2, 3, 4].forEach(s => {
+        document.getElementById(`step${s}`).classList.add("hidden");
+        const tab = document.getElementById(`stepTab${s}`);
+        tab.className = "py-2.5 md:py-3 rounded-xl border flex flex-col items-center justify-center transition-all " + 
+          (s === stepNumber ? "step-active" : s < stepNumber ? "step-done" : "step-inactive");
+      });
+      document.getElementById(`step${stepNumber}`).classList.remove("hidden");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ==================== STEP 2 ====================
+    async function runStep2_Matching() {
+      const targetComps = document.getElementById("targetCompanies").value.trim();
+      const domains = document.getElementById("targetDomains").value.trim();
+
+      if (rawExhibitors.length === 0) {
+        alert("請先匯入參展廠商名冊 CSV，或點選『載入展示範例資料』！");
+        return;
+      }
+      if (!targetComps && !domains) {
+        alert("請至少輸入感興趣的廠商或關心的技術領域！");
+        return;
+      }
+
+      goToStep(2);
+
+      const loading = document.getElementById("step2_loading");
+      const listContainer = document.getElementById("matchedListContainer");
+      loading.classList.remove("hidden");
+      listContainer.innerHTML = "";
+
+      const promptText = `
+你是一位專業產業分析師。
+使用者關注廠商：${targetComps || '無特定'}
+使用者關注技術：${domains || '無特定'}
+展商清單：${JSON.stringify(rawExhibitors)}
+
+請比對並評分排序，嚴格輸出 JSON 陣列：
+[
+  {
+    "廠商名稱": "公司標準名稱",
+    "搜尋關鍵字": "用於搜尋的關鍵字",
+    "攤位編號": "攤位編號",
+    "推薦星等": 5,
+    "公司介紹": "2~3 句說明公司定位與業務",
+    "上市櫃狀態": "上市 / 上櫃 / 興櫃 / 未上市 / 外商",
+    "股票代號": "例如: 2330 (未上市則填無)",
+    "產業地位與優勢": "競爭優勢 (30字內)",
+    "主要產品和技術": "成熟主力技術 (30字內)",
+    "最新產品和技術": "近期突破技術 (30字內)"
+  }
+]`;
+
+      try {
+        const textOutput = await callGeminiAI(promptText);
+        scoredExhibitors = JSON.parse(textOutput);
+        renderStep2List();
+      } catch (err) {
+        listContainer.innerHTML = `<div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm">❌ 檢索失敗：${err.message}</div>`;
+      } finally {
+        loading.classList.add("hidden");
+      }
+    }
+
+    function renderStep2List() {
+      const container = document.getElementById("matchedListContainer");
+      container.innerHTML = "";
+
+      scoredExhibitors.forEach((item, index) => {
+        const stars = "★".repeat(item.推薦星等 || 4) + "☆".repeat(5 - (item.推薦星等 || 4));
+        const isListed = item.上市櫃狀態 && item.上市櫃狀態 !== "未上市" && item.上市櫃狀態 !== "N/A" && item.股票代號 !== "無";
+        const stockBadge = isListed 
+          ? `<span class="badge-finance text-xs px-2.5 py-1 rounded-md font-mono font-semibold">${item.上市櫃狀態} ${item.股票代號 || ''}</span>`
+          : `<span class="bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-md border border-slate-200 font-medium">${item.上市櫃狀態 || '未上市'}</span>`;
+
+        const queryTerm = encodeURIComponent(item.搜尋關鍵字 || item.廠商名稱);
+        const stockCode = (item.股票代號 && item.股票代號 !== "無") ? encodeURIComponent(item.股票代號) : "";
+        const financeUrl = stockCode ? `https://tw.stock.yahoo.com/quote/${stockCode}` : `https://www.google.com/search?q=${queryTerm}+公司登記+營業額`;
+        const newsUrl = `https://news.google.com/search?q=${queryTerm}&hl=zh-TW&gl=TW&ceid=TW%3Azh-Hant`;
+        const techUrl = `https://www.google.com/search?q=${queryTerm}+最新產品+技術發表`;
+
+        const div = document.createElement("div");
+        div.className = "bg-white p-4 md:p-5 rounded-2xl border border-slate-200 space-y-3";
+        div.innerHTML = `
+          <div class="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <input type="checkbox" id="chk_${index}" value="${index}" checked class="h-5 w-5 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer">
+              <label for="chk_${index}" class="font-bold text-slate-900 text-base md:text-lg cursor-pointer">
+                ${item.廠商名稱}
+              </label>
+              <span class="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded font-mono font-semibold">攤位 ${item.攤位編號}</span>
+              ${stockBadge}
+            </div>
+            <span class="text-amber-500 text-sm md:text-base font-semibold tracking-wide">${stars}</span>
+          </div>
+
+          <div class="space-y-1.5 text-sm text-slate-600 leading-relaxed">
+            <p><span class="font-semibold text-slate-800">【公司定位】</span>${item.公司介紹 || '無'}</p>
+            ${item.產業地位與優勢 ? `<p><span class="font-semibold text-slate-800">【競爭優勢】</span>${item.產業地位與優勢}</p>` : ''}
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+              <span class="font-semibold text-slate-800 block mb-1">🛠️ 主要成熟技術：</span>
+              <p class="text-slate-600 leading-relaxed">${item.主要產品和技術 || '無'}</p>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+              <span class="font-semibold text-slate-800 block mb-1">🚀 最新突破技術：</span>
+              <p class="text-slate-600 leading-relaxed">${item.最新產品和技術 || '無'}</p>
+            </div>
+          </div>
+
+          <div class="pt-2 flex flex-wrap items-center gap-2 border-t border-slate-100">
+            <span class="text-xs font-semibold text-slate-500">外部查詢：</span>
+            <a href="${financeUrl}" target="_blank" rel="noopener noreferrer" class="badge-portal text-xs md:text-sm px-3 py-1.5 rounded-lg flex items-center gap-1">📊 財務基本面 ↗</a>
+            <a href="${newsUrl}" target="_blank" rel="noopener noreferrer" class="badge-portal text-xs md:text-sm px-3 py-1.5 rounded-lg flex items-center gap-1">📰 最新新聞 ↗</a>
+            <a href="${techUrl}" target="_blank" rel="noopener noreferrer" class="badge-portal text-xs md:text-sm px-3 py-1.5 rounded-lg flex items-center gap-1">🔍 產品技術 ↗</a>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function selectAllMatched(state) {
+      scoredExhibitors.forEach((_, idx) => {
+        const chk = document.getElementById(`chk_${idx}`);
+        if (chk) chk.checked = state;
+      });
+    }
+
+    // ==================== STEP 3 ====================
+    function runStep3_Routing() {
+      selectedExhibitors = [];
+      scoredExhibitors.forEach((item, idx) => {
+        const chk = document.getElementById(`chk_${idx}`);
+        if (chk && chk.checked) selectedExhibitors.push(item);
+      });
+
+      if (selectedExhibitors.length === 0) {
+        alert("請至少勾選一家欲參訪的廠商！");
+        return;
+      }
+
+      routedExhibitors = [...selectedExhibitors].sort((a, b) => {
+        const boothA = (a.攤位編號 || "").toUpperCase();
+        const boothB = (b.攤位編號 || "").toUpperCase();
+        return boothA.localeCompare(boothB, undefined, { numeric: true });
+      });
+
+      const container = document.getElementById("routeTableContainer");
+      let tableHtml = `
+        <table class="w-full text-left text-sm md:text-base text-slate-700 border-collapse bg-white">
+          <thead>
+            <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 text-xs md:text-sm font-semibold">
+              <th class="py-3.5 px-4">順序</th>
+              <th class="py-3.5 px-4">攤位號</th>
+              <th class="py-3.5 px-4">廠商名稱</th>
+              <th class="py-3.5 px-4">核心焦點</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-sm">
+      `;
+
+      routedExhibitors.forEach((item, i) => {
+        tableHtml += `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-3.5 px-4 font-bold text-slate-900">#${i + 1}</td>
+            <td class="py-3.5 px-4 font-mono font-semibold text-slate-800">${item.攤位編號}</td>
+            <td class="py-3.5 px-4 font-bold text-slate-900">${item.廠商名稱}</td>
+            <td class="py-3.5 px-4 text-slate-600">${item.最新產品和技術 || '重點技術展示'}</td>
+          </tr>
+        `;
+      });
+
+      tableHtml += `</tbody></table>`;
+      container.innerHTML = tableHtml;
+      goToStep(3);
+    }
+
+    // ==================== STEP 4 ====================
+    async function runStep4_GenerateCards() {
+      goToStep(4);
+      const loading = document.getElementById("step4_loading");
+      const container = document.getElementById("pdfExportArea");
+      loading.classList.remove("hidden");
+      container.innerHTML = "";
+
+      const promptText = `
+請為以下展商產出「參訪任務卡 (Visit Card)」，嚴格以 JSON 陣列格式輸出：
+${JSON.stringify(routedExhibitors)}
+
+格式要求：
+[
+  {
+    "廠商名稱": "廠商名稱",
+    "攤位編號": "攤位編號",
+    "上市櫃狀態": "例如: 上市 2330",
+    "為什麼值得看": "2~3 句說明重要性與定位",
+    "我應該看什麼": ["核心展示產品 1", "展示樣品 2"],
+    "我應該問什麼": ["必問問題 1", "必問問題 2", "必問問題 3"],
+    "我應該帶走的資訊": ["規格白皮書", "產品型錄", "商務名片"]
+  }
+]`;
+
+      try {
+        const textOutput = await callGeminiAI(promptText);
+        const cardsData = JSON.parse(textOutput);
+        renderVisitCards(cardsData);
+      } catch (err) {
+        container.innerHTML = `<div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm">❌ 生成任務卡失敗：${err.message}</div>`;
+      } finally {
+        loading.classList.add("hidden");
+      }
+    }
+
+    function renderVisitCards(cards) {
+      const container = document.getElementById("pdfExportArea");
+      container.innerHTML = `
+        <div class="border-b-2 border-slate-900 pb-3 mb-6">
+          <h1 class="text-xl md:text-2xl font-bold text-slate-900">觀展參訪任務卡 (Visit Cards)</h1>
+          <p class="text-xs md:text-sm text-slate-500 mt-1">產生日期：${new Date().toLocaleDateString('zh-TW')} | 參訪數：${cards.length} 家</p>
+        </div>
+      `;
+
+      cards.forEach((c, index) => {
+        const cardDiv = document.createElement("div");
+        cardDiv.className = "print-card bg-white border border-slate-200 p-5 md:p-6 rounded-2xl space-y-4 shadow-sm mb-6";
+        
+        let seeHtml = (c.我應該看什麼 || []).map(item => `
+          <label class="flex items-start gap-2.5 text-sm text-slate-700">
+            <input type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900">
+            <span>${item}</span>
+          </label>
+        `).join("");
+
+        let askHtml = (c.我應該問什麼 || []).map((q, i) => `
+          <li class="text-sm text-slate-700 flex items-start gap-2">
+            <span class="text-slate-900 font-bold font-mono">${i + 1}.</span>
+            <span>${q}</span>
+          </li>
+        `).join("");
+
+        let takeHtml = (c.我應該帶走的資訊 || []).map(item => `
+          <label class="flex items-start gap-2.5 text-sm text-slate-700">
+            <input type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900">
+            <span>${item}</span>
+          </label>
+        `).join("");
+
+        cardDiv.innerHTML = `
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="bg-slate-900 text-white font-bold px-2.5 py-1 rounded text-sm">#${index + 1}</span>
+              <h3 class="font-bold text-slate-900 text-lg">${c.廠商名稱}</h3>
+              <span class="font-mono text-xs md:text-sm bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded font-semibold">攤位 ${c.攤位編號}</span>
+              ${c.上市櫃狀態 ? `<span class="badge-finance text-xs md:text-sm px-2 py-0.5 rounded font-mono font-medium">${c.上市櫃狀態}</span>` : ''}
+            </div>
+          </div>
+
+          <div>
+            <h4 class="text-sm font-bold text-slate-900 mb-1.5">【1. 為什麼值得看】</h4>
+            <p class="text-sm text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-200/70 leading-relaxed">${c.為什麼值得看}</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/70 space-y-2">
+              <h4 class="text-sm font-bold text-slate-900">【2. 我應該看什麼】</h4>
+              <div class="space-y-2">${seeHtml}</div>
+            </div>
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/70 space-y-2">
+              <h4 class="text-sm font-bold text-slate-900">【4. 我應該帶走的資訊】</h4>
+              <div class="space-y-2">${takeHtml}</div>
+            </div>
+          </div>
+
+          <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/70 space-y-2">
+            <h4 class="text-sm font-bold text-slate-900">【3. 現場必問 3 題】</h4>
+            <ul class="space-y-2 pl-1">${askHtml}</ul>
+          </div>
+
+          <div class="pt-1">
+            <label class="block text-sm font-semibold text-slate-700 mb-1.5">現場速記筆記：</label>
+            <textarea placeholder="點此記錄現場交流重點..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:bg-white resize-y min-h-[70px] transition"></textarea>
+          </div>
+        `;
+        container.appendChild(cardDiv);
+      });
+    }
+
+    function exportToPDF() {
+      const element = document.getElementById("pdfExportArea");
+      const opt = {
+        margin:       [10, 10, 10, 10],
+        filename:     `Visit_Cards_${new Date().toISOString().slice(0,10)}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      html2pdf().set(opt).from(element).save();
+    }
+  </script>
+</body>
+</html>
