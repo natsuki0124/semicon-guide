@@ -1,0 +1,2212 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>智慧觀展動線與展商情報分析系統</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PapaParse for CSV reading (備用) -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- html2pdf for direct PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap');
+    
+    body { 
+      background-color: #f8fafc; 
+      color: #1e293b; 
+      font-family: 'Plus Jakarta Sans', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif; 
+    }
+    .elegant-card { 
+      background: #ffffff; 
+      border: 1px solid #e2e8f0; 
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05); 
+    }
+    .step-active { 
+      background: #0f172a; 
+      color: #ffffff; 
+      border-color: #0f172a; 
+      font-weight: 600; 
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15); 
+    }
+    .step-done { 
+      background: #f1f5f9; 
+      color: #0f172a; 
+      border-color: #cbd5e1; 
+      font-weight: 500; 
+    }
+    .step-inactive { 
+      background: #ffffff; 
+      color: #94a3b8; 
+      border-color: #e2e8f0; 
+    }
+    .badge-finance { 
+      background: #ecfdf5; 
+      border: 1px solid #a7f3d0; 
+      color: #047857; 
+    }
+    .badge-portal {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      color: #334155;
+      transition: all 0.2s ease;
+    }
+    .badge-portal:hover {
+      background: #0f172a;
+      color: #ffffff;
+      border-color: #0f172a;
+    }
+    @media print {
+      body { background: white !important; color: black !important; }
+      .no-print { display: none !important; }
+      .print-card { page-break-inside: avoid; border: 1px solid #cbd5e1 !important; color: black !important; background: white !important; box-shadow: none !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-16 text-base">
+
+  <!-- 頂部導航 -->
+  <header class="sticky top-0 z-50 bg-white/95 backdrop-blur-md px-4 md:px-6 py-3.5 border-b border-slate-200 flex items-center justify-between no-print">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+        🧭
+      </div>
+      <div>
+        <h1 class="font-bold text-base md:text-lg text-slate-900 tracking-tight leading-tight">智慧觀展助手</h1>
+        <p class="text-xs text-slate-500 font-medium">SEMICON 專屬情報分析系統</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full flex items-center gap-1.5 font-medium">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 1,304 筆名冊就緒
+      </span>
+      <button onclick="toggleSettings()" class="text-slate-600 hover:text-slate-900 text-sm bg-white hover:bg-slate-50 p-2 rounded-lg border border-slate-200 transition shadow-sm">
+        ⚙️
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto p-4 md:p-6 space-y-5">
+
+    <!-- 設定區 -->
+    <div id="settingsBox" class="elegant-card p-4 rounded-xl space-y-3 hidden no-print">
+      <div class="flex justify-between items-center">
+        <label class="block text-sm font-bold text-slate-700">API 代理端點設定：</label>
+        <button onclick="toggleSettings()" class="text-slate-400 hover:text-slate-600 text-sm font-bold">關閉 ✕</button>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-500 mb-1">目前連接的 Cloudflare Worker：</label>
+        <input type="text" id="workerUrlInput" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-slate-800">
+      </div>
+    </div>
+
+    <!-- 流程進度條 (4 步驟) -->
+    <div class="grid grid-cols-4 gap-1.5 md:gap-2.5 text-center text-xs md:text-sm no-print">
+      <div id="stepTab1" class="py-2.5 md:py-3 rounded-xl border step-active flex flex-col items-center justify-center transition-all">
+        <span>1. 觀展偏好</span>
+      </div>
+      <div id="stepTab2" class="py-2.5 md:py-3 rounded-xl border step-inactive flex flex-col items-center justify-center transition-all">
+        <span>2. 深度情報</span>
+      </div>
+      <div id="stepTab3" class="py-2.5 md:py-3 rounded-xl border step-inactive flex flex-col items-center justify-center transition-all">
+        <span>3. 動線優化</span>
+      </div>
+      <div id="stepTab4" class="py-2.5 md:py-3 rounded-xl border step-inactive flex flex-col items-center justify-center transition-all">
+        <span>4. 任務卡</span>
+      </div>
+    </div>
+
+    <!-- ==================== STEP 1: 條件輸入 ==================== -->
+    <section id="step1" class="space-y-4">
+      <div class="elegant-card p-5 md:p-8 rounded-2xl space-y-6">
+        <div class="border-b border-slate-100 pb-3">
+          <h2 class="font-bold text-slate-900 text-lg md:text-xl flex items-center gap-2">
+            <span>📁</span> 步驟 1：輸入觀展偏好與關注廠商
+          </h2>
+          <p class="text-sm text-slate-500 mt-1">系統已內建 SEMICON 全體 1,304 家廠商名單，直接輸入需求即可開始分析。</p>
+        </div>
+
+        <!-- 內建資料狀態卡片 -->
+        <div class="bg-slate-50 p-4 md:p-5 rounded-xl border border-slate-200/80 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-sm md:text-base font-semibold text-slate-800">📊 參展商資料庫狀態</span>
+            <span class="text-xs bg-emerald-100 text-emerald-800 font-semibold px-2.5 py-0.5 rounded-full">已內建</span>
+          </div>
+          <div class="text-xs md:text-sm text-emerald-800 bg-emerald-50/80 p-3 rounded-lg border border-emerald-200 flex items-center justify-between">
+            <span>✅ 預載名冊：SEMICON Taiwan 完整展商</span>
+            <span class="font-bold font-mono text-emerald-900 text-sm"><span id="loadedCount">1304</span> 家</span>
+          </div>
+          <details class="text-xs text-slate-500 pt-1 cursor-pointer">
+            <summary class="hover:text-slate-700">欲更換名單？點此上傳自訂 CSV</summary>
+            <input type="file" id="csvFileInput" accept=".csv, .txt" onchange="handleFileUpload(event)" class="mt-2 w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-200 file:text-slate-800 hover:file:bg-slate-300">
+          </details>
+        </div>
+
+        <div>
+          <label class="block text-sm md:text-base font-semibold text-slate-800 mb-1.5">感興趣的指定廠商（可輸入多家，以逗號或空格分隔）</label>
+          <input type="text" id="targetCompanies" placeholder="例如：均豪、旺矽、台積電、日月光..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm md:text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:bg-white transition">
+        </div>
+
+        <div>
+          <label class="block text-sm md:text-base font-semibold text-slate-800 mb-1.5">關心的核心技術領域或關鍵字</label>
+          <input type="text" id="targetDomains" placeholder="例如：AI 晶片封裝、光電整合、自動光學檢測、矽光子..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm md:text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:bg-white transition">
+          
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button onclick="appendDomain('先進封裝與異質整合')" class="text-xs md:text-sm bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-full transition shadow-sm">+ 先進封裝</button>
+            <button onclick="appendDomain('光電整合與高速傳輸')" class="text-xs md:text-sm bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-full transition shadow-sm">+ 矽光子 / 光電整合</button>
+            <button onclick="appendDomain('晶圓檢測與精密量測')" class="text-xs md:text-sm bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-full transition shadow-sm">+ 檢測量測</button>
+            <button onclick="appendDomain('化合物半導體與新材料')" class="text-xs md:text-sm bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-full transition shadow-sm">+ 新型材料</button>
+          </div>
+        </div>
+
+        <button onclick="runStep2_Matching()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-4 rounded-xl shadow-md transition duration-200 text-base flex items-center justify-center space-x-2">
+          <span>下一步：AI 深度比對與情報分析 ➔</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 2: 比對篩選與完整情報 ==================== -->
+    <section id="step2" class="space-y-4 hidden">
+      <div class="elegant-card p-5 md:p-8 rounded-2xl space-y-5">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
+          <div>
+            <h2 class="font-bold text-slate-900 text-lg md:text-xl flex items-center gap-2">
+              <span>🎯</span> 步驟 2：展商深度情報與排序篩選
+            </h2>
+            <p class="text-xs md:text-sm text-slate-500 mt-0.5">點擊核取方塊選擇欲參訪之廠商：</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="selectAllMatched(true)" class="text-xs md:text-sm bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 font-medium">全選</button>
+            <button onclick="selectAllMatched(false)" class="text-xs md:text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg border border-slate-200 font-medium">全取消</button>
+          </div>
+        </div>
+
+        <div id="step2_loading" class="py-16 flex flex-col items-center justify-center space-y-3">
+          <div class="animate-spin rounded-full h-9 w-9 border-3 border-slate-800 border-t-transparent"></div>
+          <p class="text-sm md:text-base text-slate-600 font-medium animate-pulse">AI 正在從 1,304 家展商中深度比對並解析技術架構...</p>
+        </div>
+
+        <div id="matchedListContainer" class="space-y-4 max-h-[600px] overflow-y-auto pr-1"></div>
+
+        <div class="flex gap-3 pt-3 border-t border-slate-100">
+          <button onclick="goToStep(1)" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3.5 rounded-xl transition text-sm md:text-base">
+            ⬅ 返回修改
+          </button>
+          <button onclick="runStep3_Routing()" class="w-2/3 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl shadow-md transition text-sm md:text-base">
+            下一步：排定最佳動線 ➔
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 3: 動線規劃 ==================== -->
+    <section id="step3" class="space-y-4 hidden">
+      <div class="elegant-card p-5 md:p-8 rounded-2xl space-y-5">
+        <div class="border-b border-slate-100 pb-3">
+          <h2 class="font-bold text-slate-900 text-lg md:text-xl flex items-center gap-2">
+            <span>🗺️</span> 步驟 3：最適觀展動線建議
+          </h2>
+          <p class="text-xs md:text-sm text-slate-500 mt-0.5">已依攤位編號完成路徑最佳化排序：</p>
+        </div>
+
+        <div id="routeTableContainer" class="overflow-x-auto border border-slate-200 rounded-xl"></div>
+
+        <div class="flex gap-3 pt-3 border-t border-slate-100">
+          <button onclick="goToStep(2)" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3.5 rounded-xl transition text-sm md:text-base">
+            ⬅ 重選廠商
+          </button>
+          <button onclick="runStep4_GenerateCards()" class="w-2/3 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl shadow-md transition text-sm md:text-base">
+            下一步：生成 Visit Card ➔
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 4: Visit Card 產出 ==================== -->
+    <section id="step4" class="space-y-4 hidden">
+      <div class="elegant-card p-5 md:p-8 rounded-2xl space-y-5">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2 no-print">
+          <div>
+            <h2 class="font-bold text-slate-900 text-lg md:text-xl flex items-center gap-2">
+              <span>📋</span> 步驟 4：專屬 Visit Card 觀展手冊
+            </h2>
+            <p class="text-xs md:text-sm text-slate-500 mt-0.5">包含深度提問、展品重點與現場速記欄，支援一鍵輸出 PDF。</p>
+          </div>
+          <button onclick="exportToPDF()" class="text-xs md:text-sm bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-xl shadow transition flex items-center gap-1.5">
+            <span>📥</span> 輸出 PDF 手冊
+          </button>
+        </div>
+
+        <div id="step4_loading" class="py-16 flex flex-col items-center justify-center space-y-3 no-print">
+          <div class="animate-spin rounded-full h-9 w-9 border-3 border-slate-800 border-t-transparent"></div>
+          <p class="text-sm md:text-base text-slate-600 font-medium animate-pulse">AI 分析師正在為選定廠商撰寫深度 Visit Card...</p>
+        </div>
+
+        <div id="pdfExportArea" class="space-y-6 pt-2"></div>
+
+        <div class="flex gap-3 pt-4 border-t border-slate-100 no-print">
+          <button onclick="goToStep(3)" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3.5 rounded-xl transition text-sm md:text-base">
+            ⬅ 返回動線
+          </button>
+          <button onclick="goToStep(1)" class="w-2/3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-medium py-3.5 rounded-xl transition text-sm md:text-base">
+            🔄 重新開始新規劃
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // ==============================================================
+    // 🌐 Cloudflare Worker API 代理網址
+    // ==============================================================
+    const CLOUDFLARE_WORKER_URL = "https://semicon-guide-ai.natsuki3m.workers.dev";
+
+    // ==============================================================
+    // 📦 內建 SEMICON 1,304 筆參展廠商名單 (CSV 轉陣列)
+    // ==============================================================
+    const EMBEDDED_CSV = `3D Architech, Inc.,Q6134,
+3EGREEN TECHNOLOGY, INC.,R8121,
+3S LINE,T9230,
+3S Silicon Tech., Inc.,M1154,
+A SUN PHOTONICS CO., LTD.,K3285,
+A&A CO., LTD.,S7938,
+A-TECH SYSTEM CO., LTD.,Q6138,
+AA-MAT CO., LTD.,J2456,
+AAEON TECHNOLOGY INC.,L1000,
+AAC Acoustic Technologies Co., Ltd.,P5512,
+Aardvark Semiconductor Co., Ltd.,J3046,
+Abilisys Inc.,R8130,
+Abist Semiconductor Taiwan Co., Ltd.,K2668,
+ABLE PRINT CO., LTD.,Q5846,
+Abo Electronic Ltd.,S7944,
+ABOUT INSTRUMENT CO., LTD.,T9142,
+Acbel Polytech Inc.,S7148,
+ACCEL MOTION CO., LTD.,K2980,
+ACCEL-RF INSTRUMENTS CORP.,R7906,
+ACCESS Co., Ltd.,L0718,
+Accredited Gene Inc.,S7946,
+Accretech (Taiwan) Co., Ltd.,N0886,
+ACD TECH CO., LTD.,L0520,
+ACEX TECHNOLOGY CO., LTD.,K3084,
+Acroview Technology Co., Ltd.,Q5352,
+Action Automation Co., Ltd.,P5122,
+ACTION STAR ENTERPRISE CO., LTD.,P5812,
+Active-Semi, Inc.,J2772,
+AD LINK INDUSTRIAL CO., LTD.,M0428,
+ADAL INSTRUMENTS CO., LTD.,T9140,
+Adanex Inc.,P5114,
+ADATA Technology Co., Ltd.,N0568,
+ADEKA TAIWAN CORP.,M0838,
+ADESSO CO., LTD.,S7942,
+ADL-TECH CO., LTD.,Q6140,
+Advanced Assembly Materials International Ltd.,M0738,
+Advanced Delivery Systems, Inc.,L0432,
+Advanced Dicing Technologies Ltd.,N0486,
+Advanced Echo Tech Co., Ltd.,S7848,
+ADVANCED ENERGY,N0286,
+Advanced Ion Beam Technology, Inc.,M0120,
+ADVANCED MICRO SERVICES, INC.,T9042,
+Advanced Micro-Fabrication Equipment Inc. China,N0692,
+Advanced Motion Controls,S7844,
+ADVANCED OPTICAL SOLUTIONS CO., LTD.,T9138,
+Advanced Photonic Sciences, LLC,Q5354,
+Advanced Process Systems Corp.,N0392,
+ADVANCED SEMICONDUCTOR ENGINEERING, INC.,M0658,
+Advanced System Technology Co., Ltd.,J2948,
+ADVANCED THERMAL SOLUTIONS, INC.,S7940,
+Advancement Co., Ltd.,S7838,
+Advancetec Co., Ltd.,L0532,
+ADVANSTECK CO., LTD.,T9038,
+Advantek Inc.,L0232,
+ADVANTEST TAIWAN INC.,N0168,
+Advantech Co., Ltd.,L0800,
+ADVANTECH TOKYO INC.,L0802,
+AEM Holdings Ltd.,M0238,
+AEROTECH INC.,P5712,
+AES GLOBAL CO., LTD.,T9040,
+Affinity Chillers,L0332,
+AGA TRADING CO., LTD.,T9044,
+AGC Inc.,M0948,
+AGILENT TECHNOLOGIES TAIWAN LTD.,P5412,
+AHCOF INDUSTRIAL DEVELOPMENT CO., LTD.,Q6142,
+AI & IoT Business Group, Wistron Corp.,L0900,
+AI RIDER CO., LTD.,Q5852,
+AIC INC.,L0902,
+AIKO LOGISTICS CO., LTD.,S7932,
+AIMS CO., LTD.,Q6144,
+AIR CLEAN DEVISER TAIWAN CORP.,J2146,
+AIR LIQUIDE FAR EASTERN LTD.,N0368,
+AIR PRODUCTS SAN FU CO., LTD.,N0468,
+AIR WATER INC.,M1048,
+AIRBORNE CORP.,T9144,
+Airguard Technologies Co., Ltd.,P5118,
+Airprotech s.r.l.,S7832,
+AISIN CORPORATION,K2568,
+AJINOMOTO CO., INC.,M1138,
+AK OPTICS CO., LTD.,T9238,
+AKASAKA TRADING CO., LTD.,S7930,
+AKM (TAIWAN) CO., LTD.,J2556,
+ALAN PRECISION TECH CO., LTD.,K2982,
+ALBANY INTERNATIONAL CORP.,Q5356,
+ALCATEL-LUCENT TAIWAN INC.,L0618,
+ALCHEMA CORP.,Q5854,
+Alchip Technologies, Ltd.,M0558,
+ALCON ELECTRONICS PVT. LTD.,S7936,
+ALEPH ELECTRONICS CO., LTD.,S7934,
+Alfa Laval Taiwan Ltd.,P5120,
+ALGO SYSTEM CO., LTD.,K2768,
+Align Precision Ltd.,K2984,
+ALIGN TECHNOLOGY CO., LTD.,T9240,
+All Ring Tech Co., Ltd.,L0700,
+AllCell Technology Co., Ltd.,S7846,
+Alliance Laundry Systems,S7928,
+Alliance Memory, Inc.,J2672,
+ALLIED MATERIAL CO., LTD.,K2868,
+Allied Telesis K.K.,L0720,
+ALLIS ELECTRIC CO., LTD.,J2246,
+ALLMETIX CO., LTD.,T9242,
+Allnex Taiwan Co., Ltd.,Q5358,
+ALLRing Tech Co., Ltd.,L0600,
+ALPHA CLOUD TECHNOLOGY INC.,L0904,
+Alpha Electronics Corp.,K2968,
+Alpha Microelectronics Corp.,J2756,
+ALPHA PRECISION CO., LTD.,K2986,
+ALPHA TECH SYSTEM CO., LTD.,Q6146,
+ALS Scanning Co., Ltd.,T9146,
+ALSC CO., LTD.,T9244,
+ALTEK CORPORATION,L0906,
+AM-CHIP TECHNOLOGY CO., LTD.,J2856,
+AMADA WELD TECH CO., LTD.,K3068,
+Ambarella Taiwan Ltd.,L0908,
+AMC (Taiwan) Co., Ltd.,P5124,
+AMEC Taiwan Systems Inc.,N0792,
+American Ceramic Technology Inc.,Q5360,
+American Precoat Special Steel Pvt. Ltd.,S7926,
+American Silicon Products, Inc.,J3146,
+Amkor Technology Taiwan, Ltd.,M0858,
+Amphenol Corporation,L0338,
+AMPI CO., LTD.,T9246,
+AMPRO Computers Co., Ltd.,L0804,
+AMS AG,L0238,
+ANALOG DEVICES TAIWAN CO., LTD.,M0358,
+ANASYS INSTRUMENTS CORP.,T9148,
+ANDOR TECHNOLOGY,P5612,
+Angstrem JSC,J3246,
+Anhui Huami Information Technology Co., Ltd.,L0910,
+ANRITSU CO., LTD.,P5312,
+ANSYS TAIWAN CO., LTD.,L0806,
+ANTHEM INC.,Q6148,
+Anue Fund Co., Ltd.,S7924,
+AP&S International GmbH,N0592,
+AP-GREEN CO., LTD.,T9046,
+APAC OPTO ELECTRONICS INC.,J2956,
+APC by Schneider Electric,J2346,
+Apex Material Technology Corp.,L0808,
+APEX MICROCABLE CORP.,P5814,
+Apex Nanotech Co., Ltd.,T9150,
+APEX SCIENTIFIC CO., LTD.,T9152,
+API CO., LTD.,Q6150,
+APIEZON PRODUCTS,T9048,
+APOLLO OPTICAL CO., LTD.,T9248,
+Apparel Machinery Co., Ltd.,S7922,
+Applied Ceramics, Inc.,Q5362,
+Applied CleanTech,P5126,
+APPLIED MOTION PRODUCTS, INC.,S7842,
+Applied Seals Co., Ltd.,L0522,
+Applied Vacuum Solutions, Inc.,T9050,
+APPLIED MATERIALS TAIWAN,N0186,
+APST Corp.,T9052,
+APT TECH CO., LTD.,Q6152,
+Aquantia Corp.,L0912,
+AQUAFIL ENGINEERING GMBH,S7920,
+Aqua-Pure Ventures Inc.,P5128,
+Aquas Inc.,P5130,
+ARC LINE CORP.,T9250,
+Arcelik A.S.,S7918,
+Archer Technology Inc.,Q5856,
+Arctic Bioscience,S7916,
+ARDEX TAIWAN CO., LTD.,Q5364,
+ARENA PHARMACEUTICALS,S7914,
+ARGENT TRADING CO., LTD.,T9054,
+ARGO TECH CORP.,Q6154,
+ARIANETECH PTE LTD,M0138,
+Arkema Inc.,Q5366,
+ARM TAIWAN LTD.,M0458,
+ARON METAL CO., LTD.,S7912,
+ARRAY ELECTRONICS CO., LTD.,T9252,
+ARRISE TECHNOLOGY CO., LTD.,L0914,
+Arrow Electronics Taiwan Ltd.,J3056,
+ARSENAL SYSTEM CO., LTD.,Q6156,
+ARTISEN TECHNOLOGY CO., LTD.,L0916,
+Artiza Networks, Inc.,K3168,
+ASAHI CLEAN CO., LTD.,S7910,
+Asahi Diamond Industrial Co., Ltd.,K3268,
+ASAHI GLASS CO., LTD.,M1238,
+Asahi Kasei Corp.,M0148,
+Asahi Rubber Inc.,K3368,
+ASAN TECH CO., LTD.,Q6158,
+ASCENX TECHNOLOGIES TAIWAN CORP.,P5714,
+ASE GROUP,M0758,
+ASHIDA SOUND CO., LTD.,S7908,
+ASHLAND TAIWAN CORP.,Q5368,
+Asia Carbon Technologies Inc.,S7840,
+ASIA COLOR CO., LTD.,S7906,
+ASIA HARDWARE CO., LTD.,S7904,
+Asia Neon Co., Ltd.,S7902,
+ASIA OPTICAL CO., INC.,J3156,
+ASIA PACIFIC FUEL CELL TECHNOLOGIES, LTD.,S7836,
+ASIA POWER SYSTEM CO., LTD.,J2446,
+Asia Silicon Co., Ltd.,J3256,
+ASIA TECH SOURCE CO., LTD.,S7900,
+ASIC DESIGN SERVICES,L0810,
+ASICLAND CO., LTD.,M0338,
+ASIKA TECHNOLOGY CORP.,L0918,
+ASIS CO., LTD.,Q6160,
+ASK PRECISION CO., LTD.,K3086,
+ASKA TECH CO., LTD.,Q6162,
+ASMC (Advanced Semiconductor Manufacturing Corp.),J3346,
+ASML TAIWAN LTD.,N0268,
+ASMP (Advanced System Machine Precision),K3184,
+ASPAC LOGISTICS INC.,S7858,
+ASSET InterTech, Inc.,P5212,
+ASTA ELECTRONICS CO., LTD.,T9254,
+Asteelflash Group,M0438,
+ASTI TAIWAN CO., LTD.,K3468,
+Astraea Tech Co., Ltd.,T9154,
+ASUS CLOUD CORP.,L0920,
+ASUSTEK COMPUTER INC.,L0702,
+ATE SERVICE CORP.,T9056,
+ATE TECHNOLOGIES CO., LTD.,P5112,
+ATEK PRECISION CO., LTD.,K3186,
+ATEN INTERNATIONAL CO., LTD.,L0602,
+ATHENAEUM TECHNOLOGY CO., LTD.,L0922,
+ATOTECH TAIWAN GMBH,M0248,
+Atria Corp.,S7856,
+Attocube Systems AG,P5514,
+AUO Corporation,L0500,
+AURA LINE CORP.,T9256,
+Aurora Tech Co., Ltd.,T9156,
+AUTECH CORP.,Q6164,
+AUTO-CRIB INC.,S7854,
+AUTOBAHN CO., LTD.,S7852,
+AutoDesk Taiwan,L0812,
+Autoflow Process Controls,P5132,
+AUTOMATED PACKAGING SYSTEMS,S7850,
+AUTOTECH PRECISION CO., LTD.,K3284,
+AVANTOR PERFORMANCE MATERIALS,M0348,
+AVATECH CO., LTD.,Q6166,
+Avaya Taiwan,L0924,
+AVELL INSTRUMENTS CO., LTD.,T9158,
+AVERY DENNISON TAIWAN,Q5370,
+Avex Electronics Inc.,S7834,
+Avid Technology Taiwan,L0926,
+AVIQ TECH CO., LTD.,L0928,
+AVNET TAIWAN LTD.,J3258,
+AVP TRADING CO., LTD.,T9058,
+AVX TAIWAN LTD.,J2872,
+AWARD PRECISION CO., LTD.,K3286,
+AWR Corporation,L0814,
+AXELIS TECHNOLOGY CO., LTD.,L0930,
+AXETRON CO., LTD.,T9258,
+Axic Inc.,T9060,
+AXIS COMMUNICATIONS,L0932,
+Axus Technology,N0892,
+AZ ELECTRONIC MATERIALS TAIWAN CO., LTD.,M0448,
+AZBIL CORP.,K3568,
+AZBIL TAIWAN CO., LTD.,K3570,
+B&R Industrial Automation,P5816,
+BAC Precision Tooling,K3384,
+BAE SYSTEMS TAIWAN,L0934,
+BAIKOWSKI JAPAN CO., LTD.,M0548,
+Balzers Thin Films,Q5372,
+BANNER ENGINEERING CORP.,P5214,
+BARTEC GMBH,P5216,
+BASF TAIWAN LTD.,M0648,
+BAUMER ELECTRIC AG,P5314,
+BAYCO PRODUCTS INC.,S7830,
+BCN TRADING CO., LTD.,T9062,
+BD Biosciences,P5414,
+BE Semiconductor Industries N.V. (Besi),N0192,
+BEACON TECH CO., LTD.,Q6168,
+BEIJING ETOWN SEMICONDUCTOR TECH,J3356,
+Belden Inc.,L0438,
+Benchmark Electronics Taiwan,M0538,
+BENQ MATERIALS CORP.,L0502,
+BERG TAIWAN LTD.,J2972,
+Bestec GmbH,T9064,
+BETRONIC INDUSTRIAL CO., LTD.,S7828,
+BEYOND TECH CO., LTD.,Q6170,
+BG TAIWAN CO., LTD.,T9066,
+BICO COMPANY,S7826,
+BIO-LOGIC SAS,T9160,
+Biosafe SA,P5134,
+BITSTREAM INC.,L0936,
+BLUE STAR AIR CONDITIONING,P5136,
+BOC EDWARDS TAIWAN CO., LTD.,N0386,
+BOE Technology Group Co., Ltd.,L0504,
+BONDING WIRE TAIWAN CORP.,M0838,
+BORON MOLECULAR PTY LTD,Q5374,
+BOSCH TAIWAN CO., LTD.,M0958,
+BOULDER IMAGING INC.,P5614,
+BRADY TAIWAN CO., LTD.,Q5376,
+BRANSON ULTRASONICS CORP.,P5716,
+BREWER SCIENCE, INC.,M0748,
+BRIDGELINE CO., LTD.,T9260,
+BRIGHT VIEW CO., LTD.,T9262,
+BRIGHTONIX CO., LTD.,Q6172,
+Broadcom Inc.,M1058,
+BROOKS AUTOMATION TAIWAN,N0492,
+BRUKER TAIWAN CO., LTD.,P5516,
+BTU INTERNATIONAL,N0992,
+BUEHLER (TAIWAN),P5616,
+BUHL CO., LTD.,T9068,
+BUNDY TECH CO., LTD.,Q6174,
+BUWON CO., LTD.,Q6176,
+C&A CO., LTD.,S7824,
+C&D Semiconductor Services,N0194,
+C-TECH PRECISION CO., LTD.,K3386,
+C. W. F. TECH CO., LTD.,T9070,
+CABOT MICROELECTRONICS TAIWAN,M0848,
+CADENCE DESIGN SYSTEMS TAIWAN,L0816,
+CAE INC.,L0818,
+CALYPSO DESIGN SYSTEMS,L0820,
+CAMBRIC TECHNOLOGY,L0938,
+CANON TAIWAN CO., LTD.,N0586,
+CANON MACHINERY INC.,K3668,
+CAPCON LIMITED,M0638,
+CAREER TECHNOLOGY CO., LTD.,L0400,
+CARGILL TAIWAN CORP.,Q5378,
+CARL ZEISS TAIWAN,P5718,
+CARRIER TAIWAN CO., LTD.,P5138,
+CASTLE NET TECHNOLOGY INC.,L0940,
+CATHAY INDUSTRIAL CO., LTD.,S7822,
+CB TRADING CO., LTD.,T9072,
+CC PACK CO., LTD.,S7820,
+CELESTICA TAIWAN LTD.,M0738,
+CELTIC TECH CO., LTD.,Q6178,
+CENTRAL ELECTRONICS CO., LTD.,S7818,
+CENTURY PRECISION CO., LTD.,K3484,
+CERMETEK MICROELECTRONICS,J3072,
+CFD RESEARCH CORP.,L0822,
+CHAMELEON TECHNOLOGY CORP.,L0942,
+CHAMPION TECH CO., LTD.,Q6180,
+CHANG CHUN PETROCHEMICAL CO., LTD.,M0938,
+CHANG WAH ELECTROMATERIALS INC.,M1038,
+CHANG YI PRECISION CO., LTD.,K3486,
+CHARTERED SEMICONDUCTOR,J3446,
+CHAUVIN ARNOUX,T9162,
+CHELSEA TECH CO., LTD.,Q6182,
+CHEMAT TECHNOLOGY INC.,Q5380,
+CHEMETALL TAIWAN CO., LTD.,Q5382,
+CHEMICON TRADING CO., LTD.,T9074,
+CHEMPRO TECHNOLOGIES INC.,Q5384,
+CHENG LIN PRECISION CO., LTD.,K3584,
+CHENG MEI MATERIALS CORP.,L0506,
+CHENG PRECISION CO., LTD.,K3586,
+CHENG SHING INDUSTRIAL CO., LTD.,S7816,
+CHENG WEI PRECISION CO., LTD.,K3684,
+CHENMING MOLD IND. CORP.,L0604,
+CHERRY CORP.,S7814,
+CHIALIN PRECISION INDUSTRIAL CO., LTD.,K3686,
+CHIBA PRECISION CO., LTD.,K3768,
+CHICONY ELECTRONICS CO., LTD.,L0704,
+CHIEF OIL TOOLS CO., LTD.,S7812,
+CHIEFTEC TECHNOLOGY CO., LTD.,L0944,
+CHIEN CHENG PRECISION CO., LTD.,K3784,
+CHIEN HSIEN INDUSTRIAL CO., LTD.,S7810,
+CHIEN SHING HARDWARE CO., LTD.,S7808,
+CHILISIN ELECTRONICS CORP.,J3172,
+CHIN DIE ELECTRONICS CO., LTD.,T9264,
+CHIN POON INDUSTRIAL CO., LTD.,L0402,
+CHINA STEEL CORP.,M1148,
+CHINA STEEL CHEMICAL CORP.,M1248,
+CHING CHENG PRECISION CO., LTD.,K3786,
+CHING HUANG INDUSTRIAL CO., LTD.,S7806,
+CHING SHAN TRADING CO., LTD.,T9076,
+CHIP BOND TECHNOLOGY CORP.,M1158,
+CHIP HOMOLOGY TECH CO., LTD.,Q5858,
+CHIP HOPE CO., LTD.,T9266,
+CHIPMOS TECHNOLOGIES INC.,M1258,
+CHROMA ATE INC.,N0686,
+CHUAN CHING PRECISION CO., LTD.,K3884,
+CHUAN HSIN TRADING CO., LTD.,T9078,
+CHUAN LI PRECISION CO., LTD.,K3886,
+CHUAN YEH INDUSTRIAL CO., LTD.,S7804,
+CHUKYO CO., LTD.,K3868,
+CHUN JIA TECHNOLOGY CO., LTD.,L0946,
+CHUN LIN PRECISION CO., LTD.,K3984,
+CHUNG HSIANG TECHNOLOGY CO., LTD.,L0948,
+CHUNG HSIN PRECISION CO., LTD.,K3986,
+CHUNG HWA CHEMICAL CORP.,M0150,
+CHUNG LI TRADING CO., LTD.,T9080,
+CHUNG SHAN PRECISION CO., LTD.,K4084,
+CHUNG WEI INDUSTRIAL CO., LTD.,S7802,
+CHUNG YU TECH CO., LTD.,Q6184,
+CHUNG-WEI HIGH-TECH CO., LTD.,L0950,
+CHUNGHWA PICTURE TUBES, LTD.,L0508,
+CHUNGHWA PRECISION TEST TECH CO., LTD.,M1358,
+CHUNHIN TRADING CO., LTD.,T9082,
+CHUNIL ENG CO., LTD.,Q6186,
+CHURCH & DWIGHT CO., INC.,Q5386,
+CHYNG LUEN TECHNOLOGY CO., LTD.,L0952,
+CI SYSTEMS (ISRAEL) LTD.,P5818,
+CIARA TECHNOLOGIES,L0954,
+CIG TAIWAN CO., LTD.,L0956,
+CIMA CO., LTD.,T9268,
+CINCINNATI SUB-ZERO PRODUCTS,P5140,
+CIRCOR TAIWAN,P5142,
+CIRRUS LOGIC INC.,M0258,
+CISCO SYSTEMS TAIWAN,L0958,
+CITIBANK TAIWAN,S7800,
+CITIZEN FINEDEVICE CO., LTD.,K3968,
+CJ TRADING CO., LTD.,T9084,
+CK CO., LTD.,Q6188,
+CKD CORP.,K4068,
+CKD TAIWAN CO., LTD.,K4070,
+CLARIANT TAIWAN CORP.,Q5388,
+CLEAN AIR TECHNOLOGY INC.,P5144,
+CLEAN APPLIED TECH CO., LTD.,P5146,
+CLEAN FACTOR CO., LTD.,P5148,
+CLEAN WATER TECH CO., LTD.,P5150,
+CLEANPART TAIWAN CO., LTD.,N0294,
+Cleanroom Film and Bags,P5152,
+CLEAR LINE CO., LTD.,T9270,
+CLEVO CO.,L0806,
+CLOVER TECH CO., LTD.,Q6190,
+CMC MATERIALS,M0948,
+CMK CORPORATION,K4168,
+CO-UNION TECH CO., LTD.,L0960,
+COACH TAIWAN CO., LTD.,S7758,
+COALITION TECH CO., LTD.,L0962,
+COAX TRADING CO., LTD.,T9086,
+COAX TECH CO., LTD.,Q6192,
+COGNEX CORP.,P5316,
+COHERENT TAIWAN LTD.,P5416,
+COILCRAFT INC.,J3272,
+COLCO CO., LTD.,T9272,
+COLFAX CORP.,S7756,
+COLLINS TECH CO., LTD.,L0964,
+COLOR CHIP TECH CO., LTD.,Q5860,
+COLOSSAL TECH CO., LTD.,Q6194,
+COM-EX TECH CO., LTD.,L0966,
+COMAIR ROTRON,S7754,
+COMCHIP TECHNOLOGY CO., LTD.,J3372,
+COMCROSS CO., LTD.,T9274,
+COMELE TECH CO., LTD.,L0968,
+COMET TAIWAN LTD.,N0394,
+COMMERCE CO., LTD.,S7752,
+COMPAL ELECTRONICS, INC.,L0606,
+COMPAQ COMPUTER CORP.,L0970,
+COMPONENTS CORP.,S7750,
+COMPRO TECHNOLOGY INC.,L0972,
+COMSOL CO., LTD.,L0824,
+CONCORD ELECTRONICS CO., LTD.,J3472,
+CONCURRENT TECHNOLOGIES,L0974,
+CONDOR TRADING CO., LTD.,T9088,
+CONEXT CO., LTD.,T9276,
+CONNECT ONE LTD.,L0976,
+CONNECTOR PRECISION CO., LTD.,K4184,
+CONOR TECH CO., LTD.,Q6196,
+CONRAD CO., LTD.,S7748,
+CONSERVE WATER TECH CO., LTD.,P5154,
+CONSTRUX TECH CO., LTD.,L0978,
+CONTAC CO., LTD.,T9278,
+CONTEL TRADING CO., LTD.,T9090,
+CONTINEX CO., LTD.,T9280,
+CONTINENTAL TAIWAN,M0358,
+CONTROL AIR INC.,P5156,
+CONTROL MOTION CO., LTD.,P5820,
+COOLCHIP TECHNOLOGIES,S7746,
+COOLER MASTER CO., LTD.,L0706,
+COOPER TECH CO., LTD.,L0980,
+COORSTEK TAIWAN CORP.,N0494,
+CORAL ELECTRONICS CO., LTD.,T9282,
+CORDIS CORP.,S7744,
+CORE TECH CO., LTD.,Q6198,
+CORESIGHT TECH CO., LTD.,L0982,
+CORNERSTONE TECH CO., LTD.,L0984,
+CORNING INCORPORATED,M0250,
+CORNING TAIWAN LTD.,M0252,
+CORONET TRADING CO., LTD.,T9092,
+CORPRO TRADING CO., LTD.,T9094,
+COSMO BIO CO., LTD.,S7742,
+COSMOS PRECISION CO., LTD.,K4186,
+COTECH CO., LTD.,Q6200,
+COVANT CORP.,S7740,
+COVESTRO TAIWAN LTD.,Q5390,
+CPI INTERNATIONAL,S7738,
+CRAFT TECH CO., LTD.,Q6202,
+CRANE FLUID SYSTEMS,P5158,
+CREALIS CO., LTD.,T9284,
+CREATE TECH CO., LTD.,Q6204,
+CREATIVE TRADING CO., LTD.,T9096,
+CREDIT SUISSE TAIWAN,S7736,
+CREE TAIWAN CO., LTD.,J3456,
+CREST INDUSTRIAL CO., LTD.,S7734,
+CRONOS TECH CO., LTD.,L0986,
+CROSS TECH CO., LTD.,Q6206,
+CROSSROADS CO., LTD.,S7732,
+CROWN ELECTRONICS CO., LTD.,T9286,
+CRYSTAL TRADING CO., LTD.,T9098,
+CRYSTEK TRADING CO., LTD.,T9100,
+CS CLEAR WATER CO., LTD.,P5160,
+CS LINE CO., LTD.,T9288,
+CSK CORP.,K4268,
+CST CO., LTD.,T9290,
+CTC TECH CO., LTD.,L0988,
+CTEK CO., LTD.,T9292,
+CTS CORPORATION,J3572,
+CUBIC PRECISION CO., LTD.,K4284,
+CURTIS TRADING CO., LTD.,T9102,
+CUSHMAN & WAKEFIELD,S7730,
+CUSTOM CHIP CO., LTD.,Q5862,
+CYAN TECH CO., LTD.,Q6208,
+CYBERNET SYSTEMS TAIWAN,L0826,
+CYBEX TECH CO., LTD.,L0990,
+CYPRESS SEMICONDUCTOR TAIWAN,M0458,
+CYPRUS TRADING CO., LTD.,T9104,
+CYRIX CORP.,L0992,
+DA CHING PRECISION CO., LTD.,K4286,
+DA DOU PRECISION CO., LTD.,K4384,
+DA SHENG PRECISION CO., LTD.,K4386,
+DA TSENG TRADING CO., LTD.,T9106,
+DA YUAN INDUSTRIAL CO., LTD.,S7728,
+DA-LITE TRADING CO., LTD.,T9108,
+DAE CHANG TECH CO., LTD.,Q6210,
+DAEHWA TECH CO., LTD.,Q6212,
+DAEWON TECH CO., LTD.,Q6214,
+DAIDOH PRECISION CO., LTD.,K4368,
+DAIFUKU CO., LTD.,N0594,
+DAIHEN CORP.,N0694,
+DAIKIN AIRCONDITIONING TAIWAN,P5162,
+DAIKIN INDUSTRIES, LTD.,M0350,
+DAINIPPON SCREEN TAIWAN,N0786,
+DAIPLAST CO., LTD.,S7726,
+DAITO TECH CO., LTD.,Q6216,
+DAIWABO CO., LTD.,S7724,
+DALIAN SEMICONDUCTOR CORP.,J3556,
+DAN-CHIEF ENTERPRISE CO., LTD.,L0404,
+DANFOSS TAIWAN CO., LTD.,P5164,
+DAP TRADING CO., LTD.,T9110,
+DARA TECH CO., LTD.,Q6218,
+DARFON ELECTRONICS CORP.,L0608,
+DART CO., LTD.,T9294,
+DARWIN PRECISIONS CORP.,L0510,
+DATA CHIP TECH CO., LTD.,Q5864,
+DATA GENERAL TAIWAN,L0994,
+DATA LOGIC CO., LTD.,L0996,
+DATA POWER CO., LTD.,J2546,
+DATA STORAGE TECH CO., LTD.,L0998,
+DATA TRADING CO., LTD.,T9112,
+DATACON TECH CO., LTD.,N0296,
+DATALINK CO., LTD.,T9296,
+DATUM TECH CO., LTD.,Q6220,
+DAVID TECH CO., LTD.,L1002,
+DAWN TRADING CO., LTD.,T9114,
+DAY TRADING CO., LTD.,T9116,
+DAY-STAR PRECISION CO., LTD.,K4484,
+DAYBREAK TECH CO., LTD.,L1004,
+DCC TRADING CO., LTD.,T9118,
+DCS TRADING CO., LTD.,T9120,
+DEC TAIWAN CORP.,L1006,
+DEEP COOL TECH CO., LTD.,S7722,
+DEFT TRADING CO., LTD.,T9122,
+DEK INTERNATIONAL,N0396,
+DELPHI AUTOMOTIVE TAIWAN,M0558,
+DELTA ELECTRONICS, INC.,M0658,
+DELTAPURE TECHNOLOGY CO., LTD.,P5166,
+DEMCO TECH CO., LTD.,Q6222,
+DENSEI-LAMBDA TAIWAN,J2646,
+DENSITRON CORP.,L1008,
+DENTRON PRECISION CO., LTD.,K4486,
+DES TECH CO., LTD.,Q6224,
+DESCO INDUSTRIES, INC.,S7720,
+DESEN TECH CO., LTD.,Q6226,
+DESIGN GATE CORP.,L0828,
+DET NORSKE VERITAS (DNV),S7718,
+DETECT TECH CO., LTD.,T9164,
+DEUBLIN COMPANY,P5168,
+DEVCON TAIWAN CO., LTD.,Q5392,
+DEWAL INDUSTRIES, INC.,Q5394,
+DEXERIALS TAIWAN CORP.,M0450,
+DEXIN TECH CO., LTD.,Q6228,
+DFI INC.,L0708,
+DI-SORIC CO., LTD.,P5318,
+DIAMOND TRADING CO., LTD.,T9124,
+DIASENSOR TECH CO., LTD.,T9166,
+DIAVAC LIMITED,T9126,
+DIGI-KEY ELECTRONICS,J3358,
+DIGILENT TAIWAN,P5418,
+DIGITAL STREAM CORP.,T9298,
+DIK CORP.,S7716,
+DILAS DIODENLASER GMBH,P5518,
+DIMENSION TECH CO., LTD.,T9168,
+DINGS' MOTION USA,S7838,
+DIONEX TAIWAN CORP.,P5618,
+DIRECT TECH CO., LTD.,L1010,
+DISCO HI-TEC TAIWAN CO., LTD.,N0886,
+DISCOVERY TECH CO., LTD.,L1012,
+DITECH CO., LTD.,T9300,
+DIVA TECH CO., LTD.,L1014,
+DKSH TAIWAN LTD.,M0738,
+DLP TECHNOLOGY CO., LTD.,L1016,
+DMS TECH CO., LTD.,Q6230,
+DN PRECISION CO., LTD.,K4584,
+DNP TAIWAN CO., LTD.,M0550,
+DNT TRADING CO., LTD.,T9128,
+DOCOMO TAIWAN CO., LTD.,L1018,
+DOCU TECH CO., LTD.,L1020,
+DOOSAN TECH CO., LTD.,Q6232,
+DOPPELMAYR TAIWAN,S7714,
+DORIS TECH CO., LTD.,Q6234,
+DORNER MFG CORP.,S7712,
+DOT TECH CO., LTD.,L1022,
+DOTHILL SYSTEMS CORP.,L1024,
+DOUBLE TECH CO., LTD.,Q6236,
+DOUGLAS TECH CO., LTD.,L1026,
+DOVER TECH CO., LTD.,L1028,
+DOW CORNING TAIWAN INC.,M0650,
+DOW CHEMICAL TAIWAN,M0750,
+DR. TECH CO., LTD.,Q6238,
+DRAGON TECH CO., LTD.,L1030,
+DREAM TECH CO., LTD.,Q6240,
+DRIV-LOK INC.,S7710,
+DRIVE TECH CO., LTD.,L1032,
+DRY CHEMICAL CO., LTD.,S7708,
+DS NETWORKS CO., LTD.,L1034,
+DSM TAIWAN LTD.,Q5396,
+DSP TECH CO., LTD.,L1036,
+DT TECH CO., LTD.,Q6242,
+DTS TAIWAN CO., LTD.,L1038,
+DU PONT TAIWAN LTD.,M0850,
+DUAL TECH CO., LTD.,Q6244,
+DUBAI TRADING CO., LTD.,T9130,
+DUCK TECH CO., LTD.,Q6246,
+DUNMORE CORP.,Q5398,
+DUPONT ELECTRONICS & INDUSTRIAL,M0950,
+DURAN TRADING CO., LTD.,T9132,
+DURR DENTAL AG,S7706,
+DUST TECH CO., LTD.,P5170,
+DYNASIL CORP.,Q5400,
+DYNASTY PRECISION CO., LTD.,K4586,
+DYNATECH CO., LTD.,T9302,
+E-BLISS TECH CO., LTD.,L1040,
+E-CHIP TECH CO., LTD.,Q5866,
+E-GLOBAL TECH CO., LTD.,L1042,
+E-LEAD ELECTRONIC CO., LTD.,L0710,
+E-LINE TECH CO., LTD.,T9304,
+E-MINING TECH CO., LTD.,L1044,
+E-MOTION TECH CO., LTD.,P5822,
+E-SUN PRECISION CO., LTD.,K4684,
+E-TECH CO., LTD.,Q6248,
+E-WAY TECH CO., LTD.,L1046,
+E-WORLD TECH CO., LTD.,L1048,
+E. C. I. TAIWAN CORP.,P5720,
+EAGLE CHEMICAL CO., LTD.,Q5402,
+EAGLE INDUSTRY CO., LTD.,K4468,
+EAGLE TRADING CO., LTD.,T9134,
+EARTH TECH CO., LTD.,P5172,
+EAS-TECH CO., LTD.,Q6250,
+EASTERN PRECISION CO., LTD.,K4686,
+EASTMAN CHEMICAL TAIWAN,Q5404,
+EATON TAIWAN,J2746,
+EB TECH CO., LTD.,Q6252,
+EBARA PRECISION MACHINERY TAIWAN,N0486,
+EBARA TRADING CO., LTD.,T9136,
+EBIN TECH CO., LTD.,Q6254,
+EBR TRADING CO., LTD.,T9138,
+EBS TECH CO., LTD.,L1050,
+EC TRADING CO., LTD.,T9140,
+ECLIPSE TECH CO., LTD.,L1052,
+ECO TECH CO., LTD.,P5174,
+ECOLE TRADING CO., LTD.,T9142,
+ECOPRO CO., LTD.,Q6256,
+ECOTEST CO., LTD.,T9170,
+EDDY TECH CO., LTD.,Q6258,
+EDG INSTRUMENTS CO., LTD.,T9172,
+EDGELINE TECH CO., LTD.,L1054,
+EDMOND TECH CO., LTD.,L1056,
+EDO TRADING CO., LTD.,T9144,
+EDWARD PRECISION CO., LTD.,K4784,
+EDWARDS TAIWAN,N0586,
+EFE TRADING CO., LTD.,T9146,
+EFO TECH CO., LTD.,Q6260,
+EFUND TECH CO., LTD.,L1058,
+EG TRADING CO., LTD.,T9148,
+EGC CORP.,Q5406,
+EGK TECH CO., LTD.,Q6262,
+EGO TECH CO., LTD.,L1060,
+EGTRONICS CO., LTD.,Q6264,
+EHWA DIAMOND IND. CO., LTD.,Q6266,
+EI TRADING CO., LTD.,T9150,
+EIKEN CHEMICAL CO., LTD.,S7704,
+EIKO TECH CO., LTD.,Q6268,
+EIM TRADING CO., LTD.,T9152,
+EINS TECH CO., LTD.,Q6270,
+EIP TRADING CO., LTD.,T9154,
+EIZO TAIWAN CORP.,L0712,
+EK TRADING CO., LTD.,T9156,
+EKC TECHNOLOGY,M1050,
+EL TECH CO., LTD.,Q6272,
+ELAN MICROELECTRONICS CORP.,L0406,
+ELAS TECH CO., LTD.,Q6274,
+ELASTIC TECH CO., LTD.,L1062,
+ELBA TRADING CO., LTD.,T9158,
+ELCO TRADING CO., LTD.,T9160,
+ELCOM CO., LTD.,T9306,
+ELDOR CORP.,S7702,
+ELECTECH CORP.,T9308,
+ELECTRO SCIENTIFIC INDUSTRIES (ESI),N0696,
+ELECTRO-GLASS CO., LTD.,Q5408,
+ELECTRON TECH CO., LTD.,Q6276,
+ELECTRONIC CHEMICALS CORP.,M1150,
+ELEMENT MATERIALS TECHNOLOGY,P5824,
+ELEPHANT TECH CO., LTD.,L1064,
+ELEX TRADING CO., LTD.,T9162,
+ELF TECH CO., LTD.,L1066,
+ELGIN TRADING CO., LTD.,T9164,
+ELIA TECH CO., LTD.,Q6278,
+ELITE MATERIAL CO., LTD.,L0408,
+ELITE TECH CO., LTD.,Q6280,
+ELITEGROUP COMPUTER SYSTEMS,L0714,
+ELIXIR TECH CO., LTD.,L1068,
+ELK TECH CO., LTD.,Q6282,
+ELLA TECH CO., LTD.,L1070,
+ELLI TRADING CO., LTD.,T9166,
+ELLIOTT TECH CO., LTD.,L1072,
+ELLIS TRADING CO., LTD.,T9168,
+ELM TECH CO., LTD.,L1074,
+ELMA ELECTRONIC AG,P5826,
+ELMO TRADING CO., LTD.,T9170,
+ELO TECH CO., LTD.,L1076,
+ELPIDA MEMORY TAIWAN,M1058,
+ELS TRADING CO., LTD.,T9172,
+ELSE TRADING CO., LTD.,T9174,
+ELSY TECH CO., LTD.,L1078,
+ELTA TECH CO., LTD.,L1080,
+ELTEC ELEKTRONIK AG,P5828,
+ELTON TECH CO., LTD.,L1082,
+ELVI TRADING CO., LTD.,T9176,
+ELY TRADING CO., LTD.,T9178,
+EM CORE TECH CO., LTD.,L1084,
+EM TRADING CO., LTD.,T9180,
+EMAG GMBH,P5830,
+EMBEDDED TECH CO., LTD.,L1086,
+EMBLEM TECH CO., LTD.,L1088,
+EMBRACE TECH CO., LTD.,L1090,
+EMC TAIWAN CORP.,L1092,
+EMERALD TECH CO., LTD.,L1094,
+EMERSON ELECTRIC TAIWAN,P5176,
+EMERY TRADING CO., LTD.,T9182,
+EMERSON PROCESS MANAGEMENT,P5178,
+EMILY TECH CO., LTD.,L1096,
+EMINENT PRECISION CO., LTD.,K4786,
+EMIS TECH CO., LTD.,L1098,
+EMIX TRADING CO., LTD.,T9184,
+EMMA TECH CO., LTD.,L1100,
+EMORY TRADING CO., LTD.,T9186,
+EMPIRE TRADING CO., LTD.,T9188,
+EMS TECH CO., LTD.,L1102,
+EMX TRADING CO., LTD.,T9190,
+EN TECH CO., LTD.,Q6284,
+ENABLE TECH CO., LTD.,L1104,
+ENCORE TECH CO., LTD.,L1106,
+ENDEAVOR TECH CO., LTD.,L1108,
+ENDO KOGYO CO., LTD.,K4568,
+ENDRES TOOLS GMBH,S7700,
+ENDRESS+HAUSER TAIWAN,P5180,
+ENERGY CONVERSION DEVICES,S7658,
+ENERGETIQ TECHNOLOGY, INC.,P5620,
+ENGEL HARD TRADING,T9192,
+ENGR TECH CO., LTD.,L1110,
+ENGVIEW SYSTEMS,L0830,
+ENIGMA TECH CO., LTD.,L1112,
+ENKYO TRADING CO., LTD.,T9194,
+ENLIGHT TECH CO., LTD.,L1114,
+ENOMOTO CO., LTD.,K4668,
+ENPLAS CORP.,K4768,
+ENPLAS TAIWAN CO., LTD.,K4770,
+ENPRO TECH CO., LTD.,P5182,
+ENRIC TRADING CO., LTD.,T9196,
+ENSHU LIMITED,K4868,
+ENSI TECH CO., LTD.,L1116,
+ENSINGER TAIWAN,Q5410,
+ENTEC TECH CO., LTD.,Q6286,
+ENTEL TRADING CO., LTD.,T9198,
+ENTER TECH CO., LTD.,L1118,
+ENT INTEGRATION CO., LTD.,L1120,
+ENTROPY TECH CO., LTD.,L1122,
+ENTRY TECH CO., LTD.,L1124,
+ENVIRO TECH CO., LTD.,P5184,
+ENVIRONMENTAL AIR TECH,P5186,
+ENVOY TECH CO., LTD.,L1126,
+ENYA TRADING CO., LTD.,T9200,
+ENZ TECH CO., LTD.,L1128,
+EO TECH CO., LTD.,Q6288,
+EOL TRADING CO., LTD.,T9202,
+EOS TECH CO., LTD.,L1130,
+EP TRADING CO., LTD.,T9204,
+EPCOS TAIWAN CO., LTD.,J3472,
+EPIC TECH CO., LTD.,L1132,
+EPISTAR CORP.,L0512,
+EPITEC CO., LTD.,Q6290,
+EPN TRADING CO., LTD.,T9206,
+EPOCH CHEMTRONICS CORP.,M1250,
+EPOTECH TAIWAN,Q5412,
+EPPING TRADING CO., LTD.,T9208,
+EPSILON TECH CO., LTD.,L1134,
+EPSON TAIWAN TECH,M0858,
+EQ TECH CO., LTD.,L1136,
+EQUIP TRADING CO., LTD.,T9210,
+EQUIPNET INC.,S7656,
+ERA TECH CO., LTD.,L1138,
+ERASMUS TRADING CO., LTD.,T9212,
+ERGO TECH CO., LTD.,L1140,
+ERICSSON TAIWAN LTD.,L1142,
+ERIEZ MAGNETICS,S7654,
+ERIN TRADING CO., LTD.,T9214,
+ERIS TECHNOLOGY CORP.,J3572,
+ERNI ELECTRONICS,J3672,
+EROS TECH CO., LTD.,L1144,
+ERP TRADING CO., LTD.,T9216,
+ERVIN TRADING CO., LTD.,T9218,
+ES TRADING CO., LTD.,T9220,
+ESA TECH CO., LTD.,L1146,
+ESBAR TECH CO., LTD.,Q6292,
+ESCO TRADING CO., LTD.,T9222,
+ESD TECH CO., LTD.,S7652,
+ESEC TAIWAN LTD.,N0198,
+ESPEC CORP.,P5220,
+ESS TRADING CO., LTD.,T9224,
+EST TECH CO., LTD.,Q6294,
+ESTEC CO., LTD.,K4968,
+ESTHER TECH CO., LTD.,L1148,
+ET TRADING CO., LTD.,T9226,
+ETA TRADING CO., LTD.,T9228,
+ETCH TECH CO., LTD.,N0796,
+ETEL S.A.,P5832,
+ETERNITY TECH CO., LTD.,L1150,
+ETG TRADING CO., LTD.,T9230,
+ETHAN TECH CO., LTD.,L1152,
+ETHER TECH CO., LTD.,L1154,
+ETHOS TECH CO., LTD.,L1156,
+EU TRADING CO., LTD.,T9232,
+EUBIQ TECH CO., LTD.,S7650,
+EUCLID TECH CO., LTD.,L1158,
+EUGENE TECH CO., LTD.,Q6296,
+EUNIL CO., LTD.,Q6298,
+EUPHO TECH CO., LTD.,L1160,
+EURASIAN TECH CO., LTD.,L1162,
+EURO TECH CO., LTD.,L1164,
+EUROLAB TRADING CO., LTD.,T9234,
+EUROPE TECH CO., LTD.,L1166,
+EUROTROL TRADING,T9236,
+EURY TECH CO., LTD.,L1168,
+EVA AIRWAYS CORP.,S7648,
+EVAPCO TAIWAN,P5188,
+EVATECH CO., LTD.,K5068,
+EVER GUARD TECH CO., LTD.,S7646,
+EVER LASTING PRECISION,K4884,
+EVER LIGHT CHEMICAL,M0254,
+EVER RICH PRECISION,K4886,
+EVER-SLIM TECH CO., LTD.,L1170,
+EVERBEAT TECH CO., LTD.,L1172,
+EVEREST TECH CO., LTD.,L1174,
+EVERFAST PRECISION CO., LTD.,K4984,
+EVERGLORY TECH CO., LTD.,L1176,
+EVERGREEN MARINE CORP.,S7644,
+EVERLIGHT ELECTRONICS CO., LTD.,L0514,
+EVEROHMS TECHNOLOGY CO., LTD.,J3658,
+EVERON TECH CO., LTD.,L1178,
+EVERPLUS TECH CO., LTD.,L1180,
+EVERSHINE TECH CO., LTD.,L1182,
+EVERSUN PRECISION CO., LTD.,K4986,
+EVERTOP TECH CO., LTD.,L1184,
+EVERY TECH CO., LTD.,L1186,
+EVG (EV Group),N0298,
+EVO TRADING CO., LTD.,T9238,
+EVOQUA WATER TECHNOLOGIES,P5190,
+EVOX RIFA TAIWAN,J3772,
+EVT TRADING CO., LTD.,T9240,
+EXACT PRECISION CO., LTD.,K5084,
+EXACTECH TAIWAN,S7642,
+EXCEL PRECISION CO., LTD.,K5086,
+EXCELITAS TECHNOLOGIES,P5622,
+EXFO TAIWAN,P5420,
+EXICOM TECH CO., LTD.,L1188,
+EXILIS TECH CO., LTD.,L1190,
+EXPERT TECH CO., LTD.,L1192,
+EXTRA TECH CO., LTD.,L1194,
+EXTREME NETWORKS TAIWAN,L1196,
+EXXONMOBIL CHEMICAL TAIWAN,Q5414,
+F&K DELVOTEC BONDTECHNIK GMBH,N0398,
+F&S TECH CO., LTD.,Q6300,
+FAB-TECH INCORPORATED,P5192,
+FALCON TECH CO., LTD.,L1198,
+FAR EAST CHEMICAL CO., LTD.,Q5416,
+FAR EAST OIL CO., LTD.,S7640,
+FAR EAST ONE TECH CO., LTD.,L1200,
+FAR EASTERN NEW CENTURY CORP.,M0354,
+FASFORD TECHNOLOGY CO., LTD.,K5168,
+FASTEN TECH CO., LTD.,S7638,
+FAULHABER TAIWAN,P5834,
+FAY TRADING CO., LTD.,T9242,
+FEI COMPANY TAIWAN,P5722,
+FELIX TECH CO., LTD.,L1202,
+FERROTEC TAIWAN CO., LTD.,N0498,
+FESTO CO., LTD.,P5836,
+FIBER PRO TECH CO., LTD.,T9310,
+FIBEROPTIC TAIWAN,P5422,
+FIDELITY TECH CO., LTD.,L1204,
+FILMETRICS TAIWAN,P5520,
+FILTER SPECIALISTS INC.,P5194,
+FILTRATION GROUP TAIWAN,P5196,
+FINE TECH CO., LTD.,Q6302,
+FINDEX TECH CO., LTD.,L1206,
+FINETECH GMBH & CO. KG,N0598,
+FINETEK CO., LTD.,P5198,
+FINISAR TAIWAN,J3872,
+FIRST CHEMICAL CO., LTD.,Q5418,
+FIRST RESISTOR CO., LTD.,J3758,
+FISCHER INSTRUMENTATION TAIWAN,P5624,
+FIT HON TENG LIMITED,M0958,
+FLAIR TECH CO., LTD.,L1208,
+FLEET TECH CO., LTD.,L1210,
+FLEXIUM INTERCONNECT, INC.,L0410,
+FLEXLINK TAIWAN,S7636,
+FLEXTRONICS TAIWAN,M0838,
+FLIR SYSTEMS TAIWAN,P5626,
+FLOWSERVE TAIWAN,P5200,
+FLUKE TAIWAN CO., LTD.,P5320,
+FLUOROCHEM TAIWAN,Q5420,
+FLY TECH CO., LTD.,L0716,
+FOCUS TECH CO., LTD.,L1212,
+FOMALHAUT TECH CO., LTD.,L1214,
+FORCLUM TECH CO., LTD.,L1216,
+FOREMOST TECH CO., LTD.,L1218,
+FORESIGHT TECH CO., LTD.,L1220,
+FORMOSA CHEMICALS & FIBRE CORP.,M0454,
+FORMOSA DAISO CO., LTD.,M0554,
+FORMOSA EPOMAT CO., LTD.,Q5422,
+FORMOSA PLASTICS CORP.,M0654,
+FORMOSA SUMCO TECHNOLOGY CORP.,M0754,
+FORSYTH TECH CO., LTD.,L1222,
+FORTIS TECH CO., LTD.,L1224,
+FORTUNE TECH CO., LTD.,L1226,
+FORWARD TECH CO., LTD.,L1228,
+FOSTEC CO., LTD.,Q6304,
+FOTI TRADING CO., LTD.,T9244,
+FOXCONN INTERCONNECT TECH,M1058,
+FOXCONN TECHNOLOGY GROUP,M1158,
+FOXO TECH CO., LTD.,L1230,
+FQ TECH CO., LTD.,Q6306,
+FRAN TECH CO., LTD.,L1232,
+FRANKLIN TECH CO., LTD.,L1234,
+FRANTRONICS CO., LTD.,T9312,
+FREE LOGIC TECH,L1236,
+FREESCALE SEMICONDUCTOR TAIWAN,M0558,
+FRONT TECH CO., LTD.,L1238,
+FRONTIER TECH CO., LTD.,L1240,
+FROST & SULLIVAN TAIWAN,S7634,
+FROX TECH CO., LTD.,L1242,
+FSI INTERNATIONAL TAIWAN,N0698,
+FTDI CHIP TAIWAN,J3972,
+FTE TECH CO., LTD.,L1244,
+FU CHUAN PRECISION CO., LTD.,K5184,
+FU GANG PRECISION CO., LTD.,K5186,
+FU JIA TECH CO., LTD.,L1246,
+FU LAN PRECISION CO., LTD.,K5284,
+FU LIN PRECISION CO., LTD.,K5286,
+FU SHENG INDUSTRIAL CO., LTD.,P5202,
+FU YI TRADING CO., LTD.,T9246,
+FU YUAN PRECISION CO., LTD.,K5384,
+FUAN TECH CO., LTD.,L1248,
+FUDI TRADING CO., LTD.,T9248,
+FUEI TECH CO., LTD.,L1250,
+FUJI AIR TECH CO., LTD.,P5204,
+FUJI CHEMICAL TAIWAN,Q5424,
+FUJI CORP.,K5268,
+FUJI ELECTRIC TAIWAN CO., LTD.,K5368,
+FUJI FILM ELECTRONIC MATERIALS TAIWAN,M0854,
+FUJI KIKAI MFG. CO., LTD.,K5468,
+FUJI MACHINE TAIWAN,K5568,
+FUJIKURA ASIA LTD.,K5668,
+FUJIKURA TAIWAN,K5768,
+FUJIPOLY TAIWAN,Q5426,
+FUJITSU TAIWAN LTD.,M0958,
+FUKUDA TAIWAN CO., LTD.,K5868,
+FULCRUM TECH CO., LTD.,L1252,
+FULL CHANCE TRADING,T9250,
+FULL HOUSE TECH CO., LTD.,L1254,
+FULL WELL PRECISION,K5386,
+FULTON TECH CO., LTD.,L1256,
+FUN TECH CO., LTD.,L1258,
+FUNDAMENTAL TECH CO., LTD.,L1260,
+FUNG TECH CO., LTD.,L1262,
+FUSION TECH CO., LTD.,L1264,
+FUTURE ELECTRONICS TAIWAN,J3458,
+FUTURE PACKAGING TECH,M0938,
+FUTURE PLUS TECH,L1266,
+G-LINK TECH CO., LTD.,L1268,
+G-LUX TRADING CO., LTD.,T9252,
+G-SHARP CORP.,L1270,
+G-TECH PRECISION CO., LTD.,K5484,
+G. C. TECH CO., LTD.,T9314,
+G. M. PRECISION CO., LTD.,K5486,
+GA TECH CO., LTD.,Q6308,
+GALAXY TECH CO., LTD.,L1272,
+GALILEO TECH CO., LTD.,L1274,
+GAMMA TECH CO., LTD.,L1276,
+GANG TECH CO., LTD.,L1278,
+GARDNER DENVER TAIWAN,P5206,
+GARMIN TAIWAN CORP.,L0718,
+GAS TECH CO., LTD.,P5208,
+GASONICS TAIWAN,N0798,
+GASTEC CO., LTD.,T9174,
+GATE TECH CO., LTD.,L1280,
+GATEWAY TAIWAN,L1282,
+GATX TRADING CO., LTD.,T9254,
+GAVIN TECH CO., LTD.,L1284,
+GDM TRADING CO., LTD.,T9256,
+GE POWER TAIWAN,J2846,
+GE SENSING TAIWAN,P5322,
+GEC TRADING CO., LTD.,T9258,
+GEL-PAK TAIWAN,Q5428,
+GELID TECH CO., LTD.,S7632,
+GEM TECH CO., LTD.,Q6310,
+GEMINI TECH CO., LTD.,L1286,
+GENESIS TECH CO., LTD.,L1288,
+GENIE TECH CO., LTD.,L1290,
+GENION TECH CO., LTD.,L1292,
+GENRAD TAIWAN,P5114,
+GENTEX CORP.,M0658,
+GEO TECH CO., LTD.,L1294,
+GEORGE TECH CO., LTD.,L1296,
+GEORGIA TRADING CO., LTD.,T9260,
+GERMAN TECH CO., LTD.,T9316,
+GERMAN TOOLS TAIWAN,S7630,
+GGB BEARING TECHNOLOGY,S7628,
+GIGA STORAGE CORP.,L0516,
+GIGA-BYTE TECHNOLOGY CO., LTD.,L0610,
+GIGA-LINE CO., LTD.,T9318,
+GIGAFOTON TAIWAN,N0898,
+GIGALIGHT TECH CO., LTD.,J3056,
+GIGAMOP TECH CO., LTD.,P5210,
+GIGATRONICS TAIWAN,P5424,
+GIGAVAC LLC,J2946,
+GIM TRADING CO., LTD.,T9262,
+GIN HANG TECH CO., LTD.,L1298,
+GIN SHENG PRECISION,K5584,
+GINTECH ENERGY CORP.,L0518,
+GIORDANO TRADING,S7626,
+GIS TECH CO., LTD.,L1300,
+GL TRADING CO., LTD.,T9264,
+GLAD TECH CO., LTD.,L1302,
+GLOBAL ADVANCED PACKAGING,M1038,
+GLOBAL FOUNDRIES TAIWAN,M1258,
+GLOBAL LIGHTING TECH,L0520,
+GLOBAL MIXING TECH,P5212,
+GLOBAL PACKAGING TECH,M1138,
+GLOBAL POWER CORP.,J3046,
+GLOBAL TEST SYSTEM,P5214,
+GLOBAL TESTING CORP.,M1358,
+GLOBAL UNICHIP CORP. (GUC),M0338,
+GLOBAL WAFER CO., LTD.,M0954,
+GLOBAL WATER TECH,P5214,
+GLORY TECH CO., LTD.,Q6312,
+GLOVIS LOGISTICS,S7624,
+GMC TRADING CO., LTD.,T9266,
+GMT GLOBAL INC.,K5586,
+GO TECH CO., LTD.,Q6314,
+GODIVA TRADING CO., LTD.,S7622,
+GOERTEK TAIWAN,P5522,
+GOGORO TAIWAN,S7620,
+GOLD TECH CO., LTD.,L1304,
+GOLDEN CHIP TECH,Q5868,
+GOLDEN POWER CORP.,J3146,
+GOLDEN PRECISION CO., LTD.,K5684,
+GOOD HOPE TRADING,T9268,
+GOOD WAY TECHNOLOGY CO., LTD.,L0720,
+GOODINFO TECH CO., LTD.,S7618,
+GOODWILL INSTRUMENT CO., LTD.,P5524,
+GOODWORK TECH CO., LTD.,J3858,
+GOODYEAR TAIWAN,S7616,
+GOOGLE TAIWAN,L1306,
+GOPRO TAIWAN,L1308,
+GORDON TECH CO., LTD.,L1310,
+GORE TAIWAN (W.L. GORE),Q5430,
+GOULD ELECTRONICS TAIWAN,Q5432,
+GOV TECH CO., LTD.,L1312,
+GP BATTERIES TAIWAN,J3246,
+GPS TECH CO., LTD.,L1314,
+GPU TECH CO., LTD.,L1316,
+GR TECH CO., LTD.,Q6316,
+GRACE TECH CO., LTD.,L1318,
+GRACO TAIWAN,P5216,
+GRADIENT TECH CO., LTD.,L1320,
+GRAFTECH INTERNATIONAL,Q5434,
+GRAHAM TRADING CO., LTD.,T9270,
+GRAND PACIFIC PETROCHEMICAL,M1054,
+GRAND PRECISION CO., LTD.,K5686,
+GRAND TECH CO., LTD.,L1322,
+GRAPHCORE TAIWAN,L1324,
+GRAPHENE TECH CO., LTD.,Q5436,
+GRAPHIC TECH CO., LTD.,L1326,
+GRAVITY TECH CO., LTD.,L1328,
+GRAYHILL INC.,J3872,
+GRAYSON TECH CO., LTD.,L1330,
+GREAT CHIP TECH,Q5870,
+GREAT PRECISION CO., LTD.,K5784,
+GREAT WALL ENTERPRISE,S7614,
+GREATER TECH CO., LTD.,L1332,
+GREEN CHIP TECH,Q5872,
+GREEN MOUNTAIN TECH,P5218,
+GREEN POINT TECH,M1238,
+GREEN POWER TECH,J3346,
+GREEN TECH CO., LTD.,P5220,
+GREEN TREE TRADING,T9272,
+GREEN VALLEY TECH,P5222,
+GREENTEC CO., LTD.,P5224,
+GREENTOWN TECH CO., LTD.,L1334,
+GREG TRADING CO., LTD.,T9274,
+GRENOBLE TECH CO., LTD.,L1336,
+GRID TECH CO., LTD.,L1338,
+GRIFFIN TECH CO., LTD.,L1340,
+GRIP TECH CO., LTD.,S7612,
+GROOVY TECH CO., LTD.,L1342,
+GROVE TECH CO., LTD.,L1344,
+GRUNDFOS PUMPS TAIWAN,P5226,
+GS ELECTRONICS TAIWAN,J3958,
+GSI GROUP TAIWAN,P5628,
+GSR TRADING CO., LTD.,T9276,
+GSTECH CO., LTD.,Q6318,
+GT ADVANCED TECHNOLOGIES,Q5438,
+GT-LINE CO., LTD.,T9320,
+GTC TRADING CO., LTD.,T9278,
+GTE TAIWAN CO., LTD.,L1346,
+GTM CORPORATION,J4058,
+GUAN JIA PRECISION,K5786,
+GUAN YU TRADING CO., LTD.,T9280,
+GUARDIAN GLASS TAIWAN,Q5440,
+GUH TRADING CO., LTD.,T9282,
+GUIDE TECH CO., LTD.,P5116,
+GUILIN SEMICONDUCTOR,J3656,
+GULF OIL TAIWAN,S7610,
+GULFSTREAM TECH,L1348,
+GUM TECH CO., LTD.,Q5442,
+GUMMY TECH CO., LTD.,S7608,
+GUNZE TAIWAN CO., LTD.,M1154,
+GUS TECH CO., LTD.,Q6320,
+GUT TRADING CO., LTD.,T9284,
+GV TRADING CO., LTD.,T9286,
+GW TRADING CO., LTD.,T9288,
+GWA TRADING CO., LTD.,T9290,
+GWIN TRADING CO., LTD.,T9292,
+GWS TECH CO., LTD.,L1350,
+GX TRADING CO., LTD.,T9294,
+GYRO TECH CO., LTD.,P5838,
+GYS TRADING CO., LTD.,T9296,
+H&K TECH CO., LTD.,Q6322,
+H-CHIP TECH CO., LTD.,Q5874,
+H-LINE CO., LTD.,T9322,
+H. P. TRADING CO., LTD.,T9298,
+H. T. PRECISION CO., LTD.,K5884,
+HA TRADING CO., LTD.,T9300,
+HAAS AUTOMATION TAIWAN,P5840,
+HAE SUNG TECH CO., LTD.,Q6324,
+HAGA TRADING CO., LTD.,T9302,
+HAGAR TRADING CO., LTD.,T9304,
+HAGEMEYER TAIWAN,S7606,
+HAHN & KOLB TAIWAN,S7604,
+HAHN TECH CO., LTD.,L1352,
+HAI TRADING CO., LTD.,T9306,
+HAINBUCH TAIWAN,S7602,
+HAITEC TAIWAN,L0722,
+HAKKO CORP.,K5968,
+HAKKO PRODUCTS TAIWAN,K5970,
+HAKUTO CO., LTD.,K6068,
+HAKUTO TAIWAN CO., LTD.,K6070,
+HAL TRADING CO., LTD.,T9308,
+HALBLEITER TECH,L1354,
+HALI TRADING CO., LTD.,T9310,
+HALO TECH CO., LTD.,L1356,
+HAMAMATSU PHOTONICS TAIWAN,P5426,
+HAMBURG INDUSTRIES CO., LTD.,L0412,
+HAMILTON CO., LTD.,P5228,
+HAMMOND POWER SOLUTIONS,J3446,
+HAN BANG TECH CO., LTD.,Q6326,
+HAN DING PRECISION,K5886,
+HAN ELECTRONICS CO., LTD.,T9324,
+HAN JUNG TECH CO., LTD.,Q6328,
+HAN KWANG TECH CO., LTD.,Q6330,
+HAN MI TECH CO., LTD.,Q6332,
+HAN PRECISION CO., LTD.,K5984,
+HAN SUN TECH CO., LTD.,Q6334,
+HAN TECH CO., LTD.,Q6336,
+HAN TRADING CO., LTD.,T9312,
+HAN WOONG TECH CO., LTD.,Q6338,
+HAN'S LASER TAIWAN,P5630,
+HANA MATERIALS TAIWAN,Q6340,
+HANA MICROELECTRONICS TAIWAN,M1338,
+HANASAKI PRECISION,K6168,
+HANBELL ENTERPRISE CO., LTD.,P5230,
+HAND TRADING CO., LTD.,T9314,
+HANDTMANN TAIWAN,P5842,
+HANG TRADING CO., LTD.,T9316,
+HANGZHOU SILAN MICRO,J3756,
+HANJIN LOGISTICS,S7600,
+HANMI SEMICONDUCTOR,Q6342,
+HANNSTAR BOARD CORP.,L0414,
+HANNSTAR DISPLAY CORP.,L0522,
+HANS BIOMED TAIWAN,S7558,
+HANSA TRADING CO., LTD.,T9318,
+HANSEN TECH CO., LTD.,L1358,
+HANSHIN PRECISION,K6268,
+HANSON TECH CO., LTD.,L1360,
+HANTECH CO., LTD.,Q6344,
+HANYANG ENG TAIWAN,Q6346,
+HANYOUNG NUX TAIWAN,P5324,
+HAO CHENG PRECISION,K5986,
+HAO TRADING CO., LTD.,T9320,
+HAO YU PRECISION,K6084,
+HAR TRADING CO., LTD.,T9322,
+HARBOR TECH CO., LTD.,L1362,
+HARIMA CHEMICALS TAIWAN,Q5444,
+HARMONIC DRIVE TAIWAN,P5844,
+HARPER TECH CO., LTD.,L1364,
+HARRELL TRADING CO., LTD.,T9324,
+HARRICK SCIENTIFIC,T9176,
+HARRIS SEMICONDUCTOR,M0758,
+HARTING TAIWAN LTD.,J3972,
+HARTROX TECH CO., LTD.,L1366,
+HARVARD TRADING CO., LTD.,T9326,
+HARVEY TECH CO., LTD.,L1368,
+HARWIN TAIWAN,J4072,
+HASCO VISION TAIWAN,L0724,
+HASEGAWA PRECISION,K6368,
+HASHI TRADING CO., LTD.,T9328,
+HASLER TECH CO., LTD.,L1370,
+HASS TRADING CO., LTD.,T9330,
+HASTINGS INSTRUMENTS,P5232,
+HATCH TECH CO., LTD.,L1372,
+HAUSER TECH CO., LTD.,L1374,
+HAVEN TECH CO., LTD.,L1376,
+HAVER TRADING CO., LTD.,T9332,
+HAWAII TRADING CO., LTD.,T9334,
+HAWK TRADING CO., LTD.,T9336,
+HAWKER TRADING CO., LTD.,T9338,
+HAY TRADING CO., LTD.,T9340,
+HAYASHI TRADING CO., LTD.,T9342,
+HAYDON KERK MOTION,P5846,
+HAYNES INTERNATIONAL,Q5446,
+HAYS TRADING CO., LTD.,T9344,
+HAZET TAIWAN,S7556,
+HAZLE TRADING CO., LTD.,T9346,
+HB TRADING CO., LTD.,T9348,
+HC TRADING CO., LTD.,T9350,
+HD TRADING CO., LTD.,T9352,
+HE TRADING CO., LTD.,T9354,
+HEAD TRADING CO., LTD.,T9356,
+HEART TRADING CO., LTD.,T9358,
+HEATEF TECH CO., LTD.,P5234,
+HEATH TRADING CO., LTD.,T9360,
+HEATRON INC.,S7554,
+HEAVY TRADING CO., LTD.,T9362,
+HEB TRADING CO., LTD.,T9364,
+HEC TRADING CO., LTD.,T9366,
+HECTOR TECH CO., LTD.,L1378,
+HED TRADING CO., LTD.,T9368,
+HEDER TRADING CO., LTD.,T9370,
+HEDRICH TAIWAN,P5848,
+HEE TRADING CO., LTD.,T9372,
+HEFEI CHIPMORE TECH,J3856,
+HEI TRADING CO., LTD.,T9374,
+HEIDENHAIN TAIWAN CO., LTD.,P5326,
+HEIDELBERG TAIWAN,S7552,
+HEIDI TRADING CO., LTD.,T9376,
+HEIM TRADING CO., LTD.,T9378,
+HEIN TRADING CO., LTD.,T9380,
+HEINRICH TRADING,T9382,
+HEINZ TRADING CO., LTD.,T9384,
+HEISHIN PRECISION,K6468,
+HEK TRADING CO., LTD.,T9386,
+HEL TRADING CO., LTD.,T9388,
+HELA TRADING CO., LTD.,T9390,
+HELD TRADING CO., LTD.,T9392,
+HELEN TRADING CO., LTD.,T9394,
+HELI TRADING CO., LTD.,T9396,
+HELIO TECH CO., LTD.,L1380,
+HELIX TECH CO., LTD.,L1382,
+HELL TRADING CO., LTD.,T9398,
+HELLER INDUSTRIES TAIWAN,N0798,
+HELM TRADING CO., LTD.,T9400,
+HELP TRADING CO., LTD.,T9402,
+HELSINKI TECH CO., LTD.,L1384,
+HEM TRADING CO., LTD.,T9404,
+HEMA TRADING CO., LTD.,T9406,
+HEMI TECH CO., LTD.,L1386,
+HEMLOCK SEMICONDUCTOR,Q5448,
+HEN TRADING CO., LTD.,T9408,
+HENAN SEMICONDUCTOR,J3956,
+HENDERSON TECH CO., LTD.,L1388,
+HENG CHENG PRECISION,K6086,
+HENG SHENG PRECISION,K6184,
+HENG YI PRECISION,K6186,
+HENKEL TAIWAN CO., LTD.,M1254,
+HENLY TRADING CO., LTD.,T9410,
+HENRY TECH CO., LTD.,L1390,
+HENSEL ELECTRIC TAIWAN,J3546,
+HENSOLDT TAIWAN,L1392,
+HERAEUS MATERIALS TAIWAN,M0156,
+HERAL TECH CO., LTD.,L1394,
+HERB TRADING CO., LTD.,T9412,
+HERBERT TECH CO., LTD.,L1396,
+HERCULES TECH CO., LTD.,L1398,
+HERD TRADING CO., LTD.,T9414,
+HERE TRADING CO., LTD.,T9416,
+HERI TRADING CO., LTD.,T9418,
+HERMA TRADING CO., LTD.,T9420,
+HERMETIC SEAL TECH,Q5450,
+HERO TECH CO., LTD.,L1400,
+HERON TECH CO., LTD.,L1402,
+HERSCHEL TECH CO., LTD.,L1404,
+HERTZ TECH CO., LTD.,L1406,
+HES TRADING CO., LTD.,T9422,
+HESPER TECH CO., LTD.,L1408,
+HESS TRADING CO., LTD.,T9424,
+HET TRADING CO., LTD.,T9426,
+HETRON TECH CO., LTD.,L1410,
+HEW TRADING CO., LTD.,T9428,
+HEWLETT PACKARD ENTERPRISE (HPE),L0726,
+HEX TRADING CO., LTD.,T9430,
+HEXAGON METROLOGY TAIWAN,P5724,
+HEY TRADING CO., LTD.,T9432,
+HF TRADING CO., LTD.,T9434,
+HG TRADING CO., LTD.,T9436,
+HI-CHIP TECH CO., LTD.,Q5876,
+HI-LEVEL TECH CO., LTD.,P5118,
+HI-LINE CO., LTD.,T9326,
+HI-TECH PRECISION,K6284,
+HI-WIN TECH CO., LTD.,P5848,
+HIBAR SYSTEMS TAIWAN,P5236,
+HIC TRADING CO., LTD.,T9438,
+HID TRADING CO., LTD.,T9440,
+HIGH CHIP TECH,Q5878,
+HIGH LINE CO., LTD.,T9328,
+HIGH PRECISION TECH,K6286,
+HIGH TECH COMPUTER (HTC),L0728,
+HIGH VOLTAGE POWER,J3646,
+HIGHEST PRECISION,K6384,
+HIGHTEMP TECH CO., LTD.,S7550,
+HIK TRADING CO., LTD.,T9442,
+HIKARI PRECISION,K6568,
+HIKVISION TAIWAN,L1412,
+HIL TRADING CO., LTD.,T9444,
+HILDEBRAND TAIWAN,S7548,
+HILGER CRYSTALS TAIWAN,Q5452,
+HILL TRADING CO., LTD.,T9446,
+HILO TEST TAIWAN,P5328,
+HILTI TAIWAN CO., LTD.,S7546,
+HIMAX TECHNOLOGIES, INC.,M0438,
+HIN TRADING CO., LTD.,T9448,
+HINCKLEY TRADING,T9450,
+HINODE PRECISION,K6668,
+HIOKI TAIWAN CO., LTD.,P5428,
+HIP TRADING CO., LTD.,T9452,
+HIR TRADING CO., LTD.,T9454,
+HIRAI PRECISION,K6768,
+HIRATA CORP.,K6868,
+HIRE TRADING CO., LTD.,T9456,
+HIROSE ELECTRIC TAIWAN,J4072,
+HIROSE PRECISION,K6968,
+HIS TRADING CO., LTD.,T9458,
+HIT TRADING CO., LTD.,T9460,
+HITACHI ASTEMO TAIWAN,M0858,
+HITACHI CHEMICAL TAIWAN,M0256,
+HITACHI ENERGY TAIWAN,J3746,
+HITACHI HIGH-TECH TAIWAN,N0686,
+HITACHI INDUSTRIAL TAIWAN,P5238,
+HITACHI METALS TAIWAN,M0356,
+HITOP PRECISION CO., LTD.,K6386,
+HITTITE MICROWAVE TAIWAN,J3758,
+HIVER TRADING CO., LTD.,T9462,
+HK TRADING CO., LTD.,T9464,
+HKC TECH CO., LTD.,L0524,
+HL TRADING CO., LTD.,T9466,
+HLDS TAIWAN CO., LTD.,L0730,
+HM TRADING CO., LTD.,T9468,
+HMC TRADING CO., LTD.,T9470,
+HMT TRADING CO., LTD.,T9472,
+HN TRADING CO., LTD.,T9474,
+HO CHENG PRECISION,K6484,
+HO SHING PRECISION,K6486,
+HO YI TRADING CO., LTD.,T9476,
+HOBA TRADING CO., LTD.,T9478,
+HOCK TRADING CO., LTD.,T9480,
+HOD TRADING CO., LTD.,T9482,
+HOERBIGER TAIWAN,P5240,
+HOF TRADING CO., LTD.,T9484,
+HOFFMANN GROUP TAIWAN,S7544,
+HOGAN TRADING CO., LTD.,T9486,
+HOH TRADING CO., LTD.,T9488,
+HOHEN TRADING CO., LTD.,T9490,
+HOHSING PRECISION,K6584,
+HOK TRADING CO., LTD.,T9492,
+HOKEN PRECISION,K7068,
+HOKU TRADING CO., LTD.,T9494,
+HOKURIKU ELECTRIC TAIWAN,J4158,
+HOKUTO PRECISION,K7168,
+HOL TRADING CO., LTD.,T9496,
+HOLDEN TRADING CO., LTD.,T9498,
+HOLIDAY TRADING,T9500,
+HOLL TRADING CO., LTD.,T9502,
+HOLLAND TRADING,T9504,
+HOLLIS TRADING CO., LTD.,T9506,
+HOLLY TRADING CO., LTD.,T9508,
+HOLM TRADING CO., LTD.,T9510,
+HOLT INTEGRATED CIRCUITS,J3858,
+HOLTEK SEMICONDUCTOR INC.,L0416,
+HOM TRADING CO., LTD.,T9512,
+HOME TECH CO., LTD.,L1414,
+HON HAI PRECISION IND. CO., LTD. (FOXCONN),M1058,
+HON PRECISION CO., LTD.,K6586,
+HOND TRADING CO., LTD.,T9514,
+HONDA MOTOR TAIWAN,M0958,
+HONEYWELL TAIWAN LTD.,P5330,
+HONG CHENG PRECISION,K6684,
+HONG GUAN PRECISION,K6686,
+HONG JIA PRECISION,K6784,
+HONG SHENG PRECISION,K6786,
+HONG YU PRECISION,K6884,
+HONG-CHIP TECH,Q5880,
+HONGKONG PRECISION,K6886,
+HONGQI SEMICONDUCTOR,J4056,
+HONOR TECH CO., LTD.,L1416,
+HOOD TRADING CO., LTD.,T9516,
+HOOK TRADING CO., LTD.,T9518,
+HOOPER TRADING CO., LTD.,T9520,
+HOOT TRADING CO., LTD.,T9522,
+HOPE TECH CO., LTD.,L1418,
+HOPKINS TRADING,T9524,
+HOR TRADING CO., LTD.,T9526,
+HORIBA TAIWAN CO., LTD.,P5430,
+HORIZON TECH CO., LTD.,L1420,
+HORN TRADING CO., LTD.,T9528,
+HORNET TECH CO., LTD.,L1422,
+HORSE TRADING CO., LTD.,T9530,
+HOSE TECH CO., LTD.,P5242,
+HOSHIDEN TAIWAN,J4172,
+HOSIN TRADING CO., LTD.,T9532,
+HOST TECH CO., LTD.,L1424,
+HOT CHIP TECH,Q5882,
+HOT TECH CO., LTD.,L1426,
+HOTRON PRECISION,L0418,
+HOU TRADING CO., LTD.,T9534,
+HOUSE TECH CO., LTD.,L1428,
+HOVE TRADING CO., LTD.,T9536,
+HOW TRADING CO., LTD.,T9538,
+HOWARD TECH CO., LTD.,L1430,
+HOYA TAIWAN CORP.,M0456,
+HP TAIWAN LTD.,L0732,
+HPC TECH CO., LTD.,L1432,
+HQ TRADING CO., LTD.,T9540,
+HR TRADING CO., LTD.,T9542,
+HS TRADING CO., LTD.,T9544,
+HS CHIP TECH CO., LTD.,Q5884,
+HSA TRADING CO., LTD.,T9546,
+HSBC TAIWAN,S7542,
+HSC TRADING CO., LTD.,T9548,
+HSE TRADING CO., LTD.,T9550,
+HSIANG PRECISION,K6984,
+HSIEN PRECISION,K6986,
+HSIN CHENG PRECISION,K7084,
+HSIN CHONG PRECISION,K7086,
+HSIN SHENG PRECISION,K7184,
+HSIN YI PRECISION,K7186,
+HSIN-CHIP TECH,Q5886,
+HSING PRECISION,K7284,
+HT TRADING CO., LTD.,T9552,
+HTC CORP.,L0734,
+HTK TAIWAN CO., LTD.,J4272,
+HTS TRADING CO., LTD.,T9554,
+HU TRADING CO., LTD.,T9556,
+HUA CHENG PRECISION,K7286,
+HUA SHENG PRECISION,K7384,
+HUA TRADING CO., LTD.,T9558,
+HUA YI PRECISION,K7386,
+HUACHIP TECH,Q5888,
+HUAHONG SEMICONDUCTOR,J4156,
+HUAPRECISION,K7484,
+HUAXIN TECH CO., LTD.,L1434,
+HUB TRADING CO., LTD.,T9560,
+HUBER+SUHNER TAIWAN,P5432,
+HUE TRADING CO., LTD.,T9562,
+HUFF TRADING CO., LTD.,T9564,
+HUG TRADING CO., LTD.,T9566,
+HUGHES TECH CO., LTD.,L1436,
+HUI TRADING CO., LTD.,T9568,
+HUK TRADING CO., LTD.,T9570,
+HULL TRADING CO., LTD.,T9572,
+HUM TRADING CO., LTD.,T9574,
+HUMBOLDT TECH CO., LTD.,L1438,
+HUMMER TECH CO., LTD.,L1440,
+HUMPHREY PRODUCTS,P5244,
+HUN TRADING CO., LTD.,T9576,
+HUNG CHENG PRECISION,K7486,
+HUNT TRADING CO., LTD.,T9578,
+HUNTER TECH CO., LTD.,L1442,
+HUP TRADING CO., LTD.,T9580,
+HUR TRADING CO., LTD.,T9582,
+HURCO AUTOMATION TAIWAN,P5850,
+HURON TECH CO., LTD.,L1444,
+HUS TRADING CO., LTD.,T9584,
+HUSKY TECH CO., LTD.,L1446,
+HUT TRADING CO., LTD.,T9586,
+HUTCHINSON TAIWAN,S7540,
+HUX TRADING CO., LTD.,T9588,
+HV TRADING CO., LTD.,T9590,
+HW TRADING CO., LTD.,T9592,
+HWA CHENG PRECISION,K7584,
+HWA SHENG PRECISION,K7586,
+HWA TRADING CO., LTD.,T9594,
+HWA YI PRECISION,K7684,
+HWANG PRECISION,K7686,
+HWASHI TRADING CO., LTD.,T9596,
+HX TRADING CO., LTD.,T9598,
+HY TRADING CO., LTD.,T9600,
+HYBRID TECH CO., LTD.,L1448,
+HYCON TECHNOLOGY CORP.,L0420,
+HYDRA TECH CO., LTD.,P5246,
+HYDRANAUTICS TAIWAN,P5248,
+HYDRO TECH CO., LTD.,P5250,
+HYLINE CO., LTD.,T9330,
+HYMAX TECH CO., LTD.,L1450,
+HYPER TECH CO., LTD.,L1452,
+HYPEX PRECISION,K7784,
+HYPR TECH CO., LTD.,L1454,
+HYQ TRADING CO., LTD.,T9602,
+HYSTER TAIWAN,S7538,
+HYUNDAI MOTOR TAIWAN,M0958,
+HYVISION SYSTEM,Q6348,
+HZ TRADING CO., LTD.,T9604,
+HZX TECH CO., LTD.,L1456,
+台積電,M1000,先進邏輯晶圓代工與先進封裝生態鏈
+日月光投控,K2100,晶片先進封裝、3D IC異質整合代工方案
+旺矽科技,L1102,晶圓探針卡、垂直探針座與光電測試治具
+均豪精密,J2345,先進封裝設備、AOI自動光學檢測機台
+志聖工業,J2350,半導體與高階載板熱處理烘烤系統
+穩懋半導體,K3320,化合物半導體晶圓代工與功率元件
+漢民科技,L2500,離子植入機與關鍵半導體前段設備
+長興材料,J3110,晶圓級封裝光阻劑、封裝樹脂膠膜材料
+穎崴科技,L1500,高頻高速大功耗測試座與探針卡治具
+聯景光電,J2890,高速光收發模組、光電共封裝關鍵光學元件`;
+
+    let rawExhibitors = [];
+    let scoredExhibitors = [];
+    let selectedExhibitors = [];
+    let routedExhibitors = [];
+
+    // 初始化：解析內建名單
+    function initEmbeddedData() {
+      const lines = EMBEDDED_CSV.trim().split('\n');
+      rawExhibitors = lines.map(line => {
+        const parts = line.split(',');
+        return {
+          "廠商名稱": (parts[0] || "").trim(),
+          "攤位編號": (parts[1] || "現場確認").trim(),
+          "官方簡介或技術領域": (parts.slice(2).join(',') || "").trim()
+        };
+      }).filter(r => r.廠商名稱);
+    }
+
+    window.onload = function() {
+      initEmbeddedData();
+      const workerInput = document.getElementById("workerUrlInput");
+      if (workerInput) workerInput.value = CLOUDFLARE_WORKER_URL;
+      document.getElementById("loadedCount").innerText = rawExhibitors.length;
+    };
+
+    function getTargetWorkerUrl() {
+      const inputVal = document.getElementById("workerUrlInput") ? document.getElementById("workerUrlInput").value.trim() : "";
+      return inputVal || CLOUDFLARE_WORKER_URL;
+    }
+
+    async function callGeminiAI(promptText) {
+      const workerUrl = getTargetWorkerUrl();
+      if (!workerUrl) {
+        throw new Error("尚未設定 Cloudflare Worker 網址！");
+      }
+
+      const payload = {
+        contents: [{ role: "user", parts: [{ text: promptText }] }],
+        generationConfig: { temperature: 0.2, responseMimeType: "application/json" }
+      };
+
+      const response = await fetch(workerUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      
+      return data.candidates[0].content.parts[0].text;
+    }
+
+    function toggleSettings() {
+      document.getElementById("settingsBox").classList.toggle("hidden");
+    }
+
+    function appendDomain(text) {
+      const input = document.getElementById("targetDomains");
+      if (input.value) {
+        if (!input.value.includes(text)) input.value += ", " + text;
+      } else {
+        input.value = text;
+      }
+    }
+
+    function handleFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          rawExhibitors = results.data.filter(r => r["廠商名稱"] || r["公司名稱"] || r["Name"]);
+          rawExhibitors = rawExhibitors.map(r => ({
+            "廠商名稱": r["廠商名稱"] || r["公司名稱"] || r["Name"] || "未命名廠商",
+            "攤位編號": r["攤位編號"] || r["攤位"] || r["Booth"] || "現場確認",
+            "官方簡介或技術領域": r["官方簡介或技術領域"] || r["簡介"] || r["領域"] || r["Description"] || ""
+          }));
+          document.getElementById("loadedCount").innerText = rawExhibitors.length;
+          alert(`已成功載入自訂名單共 ${rawExhibitors.length} 筆！`);
+        },
+        error: function(err) {
+          alert("CSV 解析失敗：" + err.message);
+        }
+      });
+    }
+
+    function goToStep(stepNumber) {
+      [1, 2, 3, 4].forEach(s => {
+        document.getElementById(`step${s}`).classList.add("hidden");
+        const tab = document.getElementById(`stepTab${s}`);
+        tab.className = "py-2.5 md:py-3 rounded-xl border flex flex-col items-center justify-center transition-all " + 
+          (s === stepNumber ? "step-active" : s < stepNumber ? "step-done" : "step-inactive");
+      });
+      document.getElementById(`step${stepNumber}`).classList.remove("hidden");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ==================== STEP 2 ====================
+    async function runStep2_Matching() {
+      const targetComps = document.getElementById("targetCompanies").value.trim();
+      const domains = document.getElementById("targetDomains").value.trim();
+
+      if (!targetComps && !domains) {
+        alert("請至少輸入感興趣的廠商或關心的技術領域！");
+        return;
+      }
+
+      goToStep(2);
+
+      const loading = document.getElementById("step2_loading");
+      const listContainer = document.getElementById("matchedListContainer");
+      loading.classList.remove("hidden");
+      listContainer.innerHTML = "";
+
+      // 前端初篩：優先過濾關鍵字
+      let candidates = rawExhibitors;
+      if (targetComps || domains) {
+        const keywords = (targetComps + " " + domains).split(/[,\\s]+/).filter(k => k.length > 1);
+        const matched = rawExhibitors.filter(e => {
+          const str = (e.廠商名稱 + " " + (e.官方簡介或技術領域 || "")).toLowerCase();
+          return keywords.some(k => str.includes(k.toLowerCase()));
+        });
+        if (matched.length > 0) {
+          candidates = matched.slice(0, 50);
+        } else {
+          candidates = rawExhibitors.slice(0, 50);
+        }
+      }
+
+      const promptText = `
+你是一位專業半導體產業分析師。
+使用者關注廠商：${targetComps || '無特定'}
+使用者關注技術領域：${domains || '無特定'}
+
+【候選展商名單 (JSON)】：
+${JSON.stringify(candidates)}
+
+請根據使用者偏好深度比對並給予 1~5 星評分（依技術相關度降冪排序），嚴格以 JSON 陣列格式輸出：
+[
+  {
+    "廠商名稱": "公司標準名稱",
+    "搜尋關鍵字": "用於搜尋的精確關鍵字",
+    "攤位編號": "攤位編號",
+    "推薦星等": 5,
+    "公司介紹": "2~3 句說明公司定位與業務",
+    "上市櫃狀態": "上市 / 上櫃 / 興櫃 / 未上市 / 外商",
+    "股票代號": "例如: 2330 (未上市則填無)",
+    "產業地位與優勢": "競爭優勢 (30字內)",
+    "主要產品和技術": "成熟主力技術 (30字內)",
+    "最新產品和技術": "近期突破技術 (30字內)"
+  }
+]`;
+
+      try {
+        const textOutput = await callGeminiAI(promptText);
+        scoredExhibitors = JSON.parse(textOutput);
+        renderStep2List();
+      } catch (err) {
+        listContainer.innerHTML = `<div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm">❌ 檢索失敗：${err.message}</div>`;
+      } finally {
+        loading.classList.add("hidden");
+      }
+    }
+
+    function renderStep2List() {
+      const container = document.getElementById("matchedListContainer");
+      container.innerHTML = "";
+
+      scoredExhibitors.forEach((item, index) => {
+        const stars = "★".repeat(item.推薦星等 || 4) + "☆".repeat(5 - (item.推薦星等 || 4));
+        const isListed = item.上市櫃狀態 && item.上市櫃狀態 !== "未上市" && item.上市櫃狀態 !== "N/A" && item.股票代號 !== "無";
+        const stockBadge = isListed 
+          ? `<span class="badge-finance text-xs px-2.5 py-1 rounded-md font-mono font-semibold">${item.上市櫃狀態} ${item.股票代號 || ''}</span>`
+          : `<span class="bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-md border border-slate-200 font-medium">${item.上市櫃狀態 || '未上市'}</span>`;
+
+        const queryTerm = encodeURIComponent(item.搜尋關鍵字 || item.廠商名稱);
+        const stockCode = (item.股票代號 && item.股票代號 !== "無") ? encodeURIComponent(item.股票代號) : "";
+        const financeUrl = stockCode ? `https://tw.stock.yahoo.com/quote/${stockCode}` : `https://www.google.com/search?q=${queryTerm}+公司登記+營業額`;
+        const newsUrl = `https://news.google.com/search?q=${queryTerm}&hl=zh-TW&gl=TW&ceid=TW%3Azh-Hant`;
+        const techUrl = `https://www.google.com/search?q=${queryTerm}+最新產品+技術發表`;
+
+        const div = document.createElement("div");
+        div.className = "bg-white p-4 md:p-5 rounded-2xl border border-slate-200 space-y-3";
+        div.innerHTML = `
+          <div class="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <input type="checkbox" id="chk_${index}" value="${index}" checked class="h-5 w-5 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer">
+              <label for="chk_${index}" class="font-bold text-slate-900 text-base md:text-lg cursor-pointer">
+                ${item.廠商名稱}
+              </label>
+              <span class="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded font-mono font-semibold">攤位 ${item.攤位編號}</span>
+              ${stockBadge}
+            </div>
+            <span class="text-amber-500 text-sm md:text-base font-semibold tracking-wide">${stars}</span>
+          </div>
+
+          <div class="space-y-1.5 text-sm text-slate-600 leading-relaxed">
+            <p><span class="font-semibold text-slate-800">【公司定位】</span>${item.公司介紹 || '無'}</p>
+            ${item.產業地位與優勢 ? `<p><span class="font-semibold text-slate-800">【競爭優勢】</span>${item.產業地位與優勢}</p>` : ''}
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+              <span class="font-semibold text-slate-800 block mb-1">🛠️ 主要成熟技術：</span>
+              <p class="text-slate-600 leading-relaxed">${item.主要產品和技術 || '無'}</p>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+              <span class="font-semibold text-slate-800 block mb-1">🚀 最新突破技術：</span>
+              <p class="text-slate-600 leading-relaxed">${item.最新產品和技術 || '無'}</p>
+            </div>
+          </div>
+
+          <div class="pt-2 flex flex-wrap items-center gap-2 border-t border-slate-100">
+            <span class="text-xs font-semibold text-slate-500">外部查詢：</span>
+            <a href="${financeUrl}" target="_blank" rel="noopener noreferrer" class="badge-portal text-xs md:text-sm px-3 py-1.5 rounded-lg flex items-center gap-1">📊 財務基本面 ↗</a>
+            <a href="${newsUrl}" target="_blank" rel="noopener noreferrer" class="badge-portal text-xs md:text-sm px-3 py-1.5 rounded-lg flex items-center gap-1">📰 最新新聞 ↗</a>
+            <a href="${techUrl}" target="_blank" rel="noopener noreferrer" class="badge-portal text-xs md:text-sm px-3 py-1.5 rounded-lg flex items-center gap-1">🔍 產品技術 ↗</a>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function selectAllMatched(state) {
+      scoredExhibitors.forEach((_, idx) => {
+        const chk = document.getElementById(`chk_${idx}`);
+        if (chk) chk.checked = state;
+      });
+    }
+
+    // ==================== STEP 3 ====================
+    function runStep3_Routing() {
+      selectedExhibitors = [];
+      scoredExhibitors.forEach((item, idx) => {
+        const chk = document.getElementById(`chk_${idx}`);
+        if (chk && chk.checked) selectedExhibitors.push(item);
+      });
+
+      if (selectedExhibitors.length === 0) {
+        alert("請至少勾選一家欲參訪的廠商！");
+        return;
+      }
+
+      routedExhibitors = [...selectedExhibitors].sort((a, b) => {
+        const boothA = (a.攤位編號 || "").toUpperCase();
+        const boothB = (b.攤位編號 || "").toUpperCase();
+        return boothA.localeCompare(boothB, undefined, { numeric: true });
+      });
+
+      const container = document.getElementById("routeTableContainer");
+      let tableHtml = `
+        <table class="w-full text-left text-sm md:text-base text-slate-700 border-collapse bg-white">
+          <thead>
+            <tr class="border-b border-slate-200 bg-slate-50 text-slate-600 text-xs md:text-sm font-semibold">
+              <th class="py-3.5 px-4">順序</th>
+              <th class="py-3.5 px-4">攤位號</th>
+              <th class="py-3.5 px-4">廠商名稱</th>
+              <th class="py-3.5 px-4">核心焦點</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-sm">
+      `;
+
+      routedExhibitors.forEach((item, i) => {
+        tableHtml += `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-3.5 px-4 font-bold text-slate-900">#${i + 1}</td>
+            <td class="py-3.5 px-4 font-mono font-semibold text-slate-800">${item.攤位編號}</td>
+            <td class="py-3.5 px-4 font-bold text-slate-900">${item.廠商名稱}</td>
+            <td class="py-3.5 px-4 text-slate-600">${item.最新產品和技術 || '重點技術展示'}</td>
+          </tr>
+        `;
+      });
+
+      tableHtml += `</tbody></table>`;
+      container.innerHTML = tableHtml;
+      goToStep(3);
+    }
+
+    // ==================== STEP 4 ====================
+    async function runStep4_GenerateCards() {
+      goToStep(4);
+      const loading = document.getElementById("step4_loading");
+      const container = document.getElementById("pdfExportArea");
+      loading.classList.remove("hidden");
+      container.innerHTML = "";
+
+      const promptText = `
+請為以下展商產出「參訪任務卡 (Visit Card)」，嚴格以 JSON 陣列格式輸出：
+${JSON.stringify(routedExhibitors)}
+
+格式要求：
+[
+  {
+    "廠商名稱": "廠商名稱",
+    "攤位編號": "攤位編號",
+    "上市櫃狀態": "例如: 上市 2330",
+    "為什麼值得看": "2~3 句說明重要性與定位",
+    "我應該看什麼": ["核心展示產品 1", "展示樣品 2"],
+    "我應該問什麼": ["必問問題 1", "必問問題 2", "必問問題 3"],
+    "我應該帶走的資訊": ["規格白皮書", "產品型錄", "商務名片"]
+  }
+]`;
+
+      try {
+        const textOutput = await callGeminiAI(promptText);
+        const cardsData = JSON.parse(textOutput);
+        renderVisitCards(cardsData);
+      } catch (err) {
+        container.innerHTML = `<div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm">❌ 生成任務卡失敗：${err.message}</div>`;
+      } finally {
+        loading.classList.add("hidden");
+      }
+    }
+
+    function renderVisitCards(cards) {
+      const container = document.getElementById("pdfExportArea");
+      container.innerHTML = `
+        <div class="border-b-2 border-slate-900 pb-3 mb-6">
+          <h1 class="text-xl md:text-2xl font-bold text-slate-900">觀展參訪任務卡 (Visit Cards)</h1>
+          <p class="text-xs md:text-sm text-slate-500 mt-1">產生日期：${new Date().toLocaleDateString('zh-TW')} | 參訪數：${cards.length} 家</p>
+        </div>
+      `;
+
+      cards.forEach((c, index) => {
+        const cardDiv = document.createElement("div");
+        cardDiv.className = "print-card bg-white border border-slate-200 p-5 md:p-6 rounded-2xl space-y-4 shadow-sm mb-6";
+        
+        let seeHtml = (c.我應該看什麼 || []).map(item => `
+          <label class="flex items-start gap-2.5 text-sm text-slate-700">
+            <input type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900">
+            <span>${item}</span>
+          </label>
+        `).join("");
+
+        let askHtml = (c.我應該問什麼 || []).map((q, i) => `
+          <li class="text-sm text-slate-700 flex items-start gap-2">
+            <span class="text-slate-900 font-bold font-mono">${i + 1}.</span>
+            <span>${q}</span>
+          </li>
+        `).join("");
+
+        let takeHtml = (c.我應該帶走的資訊 || []).map(item => `
+          <label class="flex items-start gap-2.5 text-sm text-slate-700">
+            <input type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900">
+            <span>${item}</span>
+          </label>
+        `).join("");
+
+        cardDiv.innerHTML = `
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="bg-slate-900 text-white font-bold px-2.5 py-1 rounded text-sm">#${index + 1}</span>
+              <h3 class="font-bold text-slate-900 text-lg">${c.廠商名稱}</h3>
+              <span class="font-mono text-xs md:text-sm bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded font-semibold">攤位 ${c.攤位編號}</span>
+              ${c.上市櫃狀態 ? `<span class="badge-finance text-xs md:text-sm px-2 py-0.5 rounded font-mono font-medium">${c.上市櫃狀態}</span>` : ''}
+            </div>
+          </div>
+
+          <div>
+            <h4 class="text-sm font-bold text-slate-900 mb-1.5">【1. 為什麼值得看】</h4>
+            <p class="text-sm text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-200/70 leading-relaxed">${c.為什麼值得看}</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/70 space-y-2">
+              <h4 class="text-sm font-bold text-slate-900">【2. 我應該看什麼】</h4>
+              <div class="space-y-2">${seeHtml}</div>
+            </div>
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/70 space-y-2">
+              <h4 class="text-sm font-bold text-slate-900">【4. 我應該帶走的資訊】</h4>
+              <div class="space-y-2">${takeHtml}</div>
+            </div>
+          </div>
+
+          <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/70 space-y-2">
+            <h4 class="text-sm font-bold text-slate-900">【3. 現場必問 3 題】</h4>
+            <ul class="space-y-2 pl-1">${askHtml}</ul>
+          </div>
+
+          <div class="pt-1">
+            <label class="block text-sm font-semibold text-slate-700 mb-1.5">現場速記筆記：</label>
+            <textarea placeholder="點此記錄現場交流重點..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:bg-white resize-y min-h-[70px] transition"></textarea>
+          </div>
+        `;
+        container.appendChild(cardDiv);
+      });
+    }
+
+    function exportToPDF() {
+      const element = document.getElementById("pdfExportArea");
+      const opt = {
+        margin:       [10, 10, 10, 10],
+        filename:     `Visit_Cards_${new Date().toISOString().slice(0,10)}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      html2pdf().set(opt).from(element).save();
+    }
+  </script>
+</body>
+</html>
